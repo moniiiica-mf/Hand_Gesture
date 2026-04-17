@@ -1,0 +1,2162 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2822
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 <!DOCTYPE html>\
+<html lang="en">\
+<head>\
+  <meta charset="UTF-8">\
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">\
+  <title>Hand Motion Tracking & Gesture Recognition</title>\
+  <style>\
+    * \{\
+      margin: 0;\
+      padding: 0;\
+      box-sizing: border-box;\
+    \}\
+\
+    body \{\
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\
+      overflow: hidden;\
+      background: #000;\
+      color: #fff;\
+    \}\
+\
+    #videoContainer \{\
+      position: fixed;\
+      top: 0;\
+      left: 0;\
+      width: 100vw;\
+      height: 100vh;\
+      overflow: hidden;\
+    \}\
+\
+    #video \{\
+      position: absolute;\
+      top: 50%;\
+      left: 50%;\
+      transform: translate(-50%, -50%) scaleX(-1);\
+      min-width: 100%;\
+      min-height: 100%;\
+      width: auto;\
+      height: auto;\
+    \}\
+\
+    #canvas \{\
+      position: absolute;\
+      top: 50%;\
+      left: 50%;\
+      transform: translate(-50%, -50%);\
+      pointer-events: none;\
+      z-index: 10;\
+    \}\
+\
+    #debugPanel \{\
+      position: fixed;\
+      top: 10px;\
+      left: 10px;\
+      background: rgba(0, 0, 0, 0.85);\
+      padding: 15px;\
+      border-radius: 8px;\
+      font-size: 12px;\
+      font-family: 'Courier New', monospace;\
+      max-width: 380px;\
+      z-index: 100;\
+      backdrop-filter: blur(10px);\
+      border: 1px solid rgba(255, 255, 255, 0.1);\
+    \}\
+\
+\
+    .debug-hand \{\
+      margin-bottom: 12px;\
+      padding-bottom: 10px;\
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);\
+    \}\
+\
+    .debug-hand:last-child \{\
+      border-bottom: none;\
+      margin-bottom: 0;\
+    \}\
+\
+    .debug-label \{\
+      color: #4a9eff;\
+      font-weight: bold;\
+      margin-bottom: 4px;\
+    \}\
+\
+    .debug-row \{\
+      display: flex;\
+      justify-content: space-between;\
+      margin: 2px 0;\
+    \}\
+\
+    .debug-key \{\
+      color: #888;\
+    \}\
+\
+    .debug-value \{\
+      color: #fff;\
+      font-weight: bold;\
+    \}\
+\
+    .gesture-badge \{\
+      display: inline-block;\
+      padding: 3px 8px;\
+      background: rgba(74, 158, 255, 0.3);\
+      border-radius: 4px;\
+      margin-right: 5px;\
+      font-size: 11px;\
+    \}\
+\
+\
+\
+    #demoOverlay \{\
+      position: fixed;\
+      top: 0;\
+      left: 0;\
+      width: 100vw;\
+      height: 100vh;\
+      pointer-events: none;\
+      z-index: 5;\
+    \}\
+\
+    .zoom-indicator \{\
+      position: fixed;\
+      top: 10px;\
+      right: 10px;\
+      background: rgba(0, 0, 0, 0.85);\
+      padding: 10px 15px;\
+      border-radius: 8px;\
+      font-size: 14px;\
+      font-weight: bold;\
+      z-index: 90;\
+      backdrop-filter: blur(10px);\
+      border: 1px solid rgba(255, 255, 255, 0.1);\
+    \}\
+\
+    .loading \{\
+      position: fixed;\
+      top: 50%;\
+      left: 50%;\
+      transform: translate(-50%, -50%);\
+      text-align: center;\
+      z-index: 1000;\
+      font-size: 18px;\
+    \}\
+\
+    .loading-spinner \{\
+      width: 50px;\
+      height: 50px;\
+      border: 4px solid rgba(255, 255, 255, 0.3);\
+      border-top-color: #4a9eff;\
+      border-radius: 50%;\
+      animation: spin 1s linear infinite;\
+      margin: 0 auto 15px;\
+    \}\
+\
+    @keyframes spin \{\
+      to \{ transform: rotate(360deg); \}\
+    \}\
+\
+    .swipe-flash \{\
+      position: fixed;\
+      pointer-events: none;\
+      animation: flash 0.6s ease-out forwards;\
+      z-index: 50;\
+      display: flex;\
+      align-items: center;\
+      justify-content: center;\
+      font-size: 48px;\
+      font-weight: 900;\
+      color: rgba(255, 255, 255, 1);\
+      text-shadow:\
+        0 0 20px rgba(74, 158, 255, 1),\
+        0 0 40px rgba(74, 158, 255, 0.8),\
+        0 0 60px rgba(74, 158, 255, 0.6);\
+      letter-spacing: 3px;\
+    \}\
+\
+    .swipe-flash.left \{\
+      left: 0;\
+      top: 0;\
+      bottom: 0;\
+      width: 200px;\
+      background: linear-gradient(to right, rgba(74, 158, 255, 0.7), rgba(74, 158, 255, 0.4), transparent);\
+      box-shadow: inset -20px 0 60px rgba(74, 158, 255, 0.5);\
+    \}\
+\
+    .swipe-flash.right \{\
+      right: 0;\
+      top: 0;\
+      bottom: 0;\
+      width: 200px;\
+      background: linear-gradient(to left, rgba(74, 158, 255, 0.7), rgba(74, 158, 255, 0.4), transparent);\
+      box-shadow: inset 20px 0 60px rgba(74, 158, 255, 0.5);\
+    \}\
+\
+    .swipe-flash.up \{\
+      top: 0;\
+      left: 0;\
+      right: 0;\
+      height: 200px;\
+      background: linear-gradient(to bottom, rgba(74, 158, 255, 0.7), rgba(74, 158, 255, 0.4), transparent);\
+      box-shadow: inset 0 -20px 60px rgba(74, 158, 255, 0.5);\
+    \}\
+\
+    .swipe-flash.down \{\
+      bottom: 0;\
+      left: 0;\
+      right: 0;\
+      height: 200px;\
+      background: linear-gradient(to top, rgba(74, 158, 255, 0.7), rgba(74, 158, 255, 0.4), transparent);\
+      box-shadow: inset 0 20px 60px rgba(74, 158, 255, 0.5);\
+    \}\
+\
+    @keyframes flash \{\
+      0% \{\
+        opacity: 1;\
+        transform: scale(1);\
+      \}\
+      50% \{\
+        opacity: 0.9;\
+        transform: scale(1.05);\
+      \}\
+      100% \{\
+        opacity: 0;\
+        transform: scale(1.1);\
+      \}\
+    \}\
+\
+    .zoom-indicator-temp \{\
+      position: fixed;\
+      top: 50%;\
+      left: 50%;\
+      transform: translate(-50%, -50%);\
+      font-size: 32px;\
+      font-weight: 500;\
+      color: rgba(255, 170, 74, 0.9);\
+      text-shadow: 0 0 15px rgba(255, 170, 74, 0.4);\
+      pointer-events: none;\
+      animation: zoom-fade 0.5s ease-out forwards;\
+      z-index: 60;\
+    \}\
+\
+    @keyframes zoom-fade \{\
+      0% \{ opacity: 0.8; transform: translate(-50%, -50%) scale(0.8); \}\
+      30% \{ opacity: 0.9; transform: translate(-50%, -50%) scale(1); \}\
+      100% \{ opacity: 0; transform: translate(-50%, -50%) scale(1); \}\
+    \}\
+\
+    /* Tap orb effect */\
+    .tap-orb \{\
+      position: fixed;\
+      width: 40px;\
+      height: 40px;\
+      border-radius: 50%;\
+      background: radial-gradient(circle at 30% 30%, #3b82f6 0%, #1e40af 80%);\
+      box-shadow: 0 0 40px rgba(59,130,246,0.7);\
+      opacity: 0;\
+      pointer-events: none;\
+      transform: translate(-50%, -50%) scale(0.8);\
+      transition: transform 0.25s ease, opacity 0.35s ease;\
+      z-index: 60;\
+    \}\
+\
+    .tap-orb.active \{\
+      opacity: 1;\
+      transform: translate(-50%, -50%) scale(1.4);\
+    \}\
+  </style>\
+</head>\
+<body>\
+  <div id="videoContainer">\
+    <video id="video" autoplay playsinline></video>\
+    <canvas id="canvas"></canvas>\
+  </div>\
+\
+  <div id="debugPanel">\
+    <div class="debug-label">\uc0\u55356 \u57263  Hand Tracking Metrics</div>\
+    <div id="debugContent"></div>\
+  </div>\
+\
+  <div class="zoom-indicator" style="display: none;">Zoom: <span id="zoomValue">1.00\'d7</span></div>\
+\
+  <div id="demoOverlay"></div>\
+\
+  <div id="tapOrb" class="tap-orb"></div>\
+\
+  <div id="loading" class="loading">\
+    <div class="loading-spinner"></div>\
+    <div>Initializing hand tracking...</div>\
+  </div>\
+\
+  <!-- MediaPipe Hands -->\
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>\
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>\
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>\
+\
+  <script>\
+    // ========================================\
+    // CONFIGURATION\
+    // ========================================\
+\
+    // Toggle to disable pinch visual feedback (pink rings) while keeping gesture detection\
+    const ENABLE_PINCH_VISUALS = true; // Set to false to hide pinch rings during tap prototyping\
+\
+    const CONFIG = \{\
+      mirrorVideo: true,\
+      maxHands: 2,\
+      minConfidence: 0.7,\
+      smoothFrames: 8,\
+      lostTimeoutMs: 220,\
+      swipeSpeedPxPerSec: 800,  // Lowered from 1400 for easier detection\
+      swipeAngleToleranceDeg: 45, // Increased tolerance\
+      pinchPx: 55,  // Distance threshold for pinch detection\
+      pinchHoldMs: 220,\
+      tapDeltaZ: 0.08,  // Lowered for easier tap detection\
+      tapWindowMs: 250,  // Increased window\
+      doubleTapMinMs: 100,\
+      doubleTapMaxMs: 500,\
+      overlapPx: 140,\
+      twoHandZoomHoldMs: 160,\
+      zoomFactorPerPx: 0.003,\
+      zoomSpreadThreshold: 0.08,  // For single-hand zoom\
+      draw: \{ skeleton: true, landmarks: true, labels: true \}\
+    \};\
+\
+    // Simple tap detection configuration\
+    const TAP = \{\
+      minMovement: 0.015,    // minimum zRel change to trigger tap (slightly more separation from noise)\
+      maxMovement: 0.18,     // maximum zRel change (allow stronger jabs)\
+      cooldownMs: 260,       // cooldown after tap\
+      maxLateralPx: 200,     // max lateral movement allowed (more forgiving for natural hand drift)\
+      tapWindowMs: 300,      // max time for tap motion (allow slightly slower jab)\
+      doubleMinMs: 110,      // min gap for double tap\
+      doubleMaxMs: 420       // max gap for double tap\
+    \};\
+\
+    // MediaPipe Hand landmark indices (0-20)\
+    const LANDMARKS = \{\
+      WRIST: 0,\
+      THUMB_CMC: 1, THUMB_MCP: 2, THUMB_IP: 3, THUMB_TIP: 4,\
+      INDEX_MCP: 5, INDEX_PIP: 6, INDEX_DIP: 7, INDEX_TIP: 8,\
+      MIDDLE_MCP: 9, MIDDLE_PIP: 10, MIDDLE_DIP: 11, MIDDLE_TIP: 12,\
+      RING_MCP: 13, RING_PIP: 14, RING_DIP: 15, RING_TIP: 16,\
+      PINKY_MCP: 17, PINKY_PIP: 18, PINKY_DIP: 19, PINKY_TIP: 20\
+    \};\
+\
+    // MediaPipe connections\
+    const HAND_CONNECTIONS = [\
+      [0, 1], [1, 2], [2, 3], [3, 4],        // Thumb\
+      [0, 5], [5, 6], [6, 7], [7, 8],        // Index\
+      [0, 9], [9, 10], [10, 11], [11, 12],   // Middle\
+      [0, 13], [13, 14], [14, 15], [15, 16], // Ring\
+      [0, 17], [17, 18], [18, 19], [19, 20], // Pinky\
+      [5, 9], [9, 13], [13, 17]              // Palm\
+    ];\
+\
+    // ========================================\
+    // GLOBAL STATE\
+    // ========================================\
+    const state = \{\
+      hands: new Map(), // handId -> hand state\
+      lastFrameTime: 0,\
+      debugEnabled: true, // Always enabled\
+      cameraActive: false,\
+      useFallback: false,\
+      mousePos: \{ x: 0.5, y: 0.5 \},\
+      zoomFactor: 1.0,\
+      emaCache: new Map() // key -> smoothed value\
+    \};\
+\
+    // ========================================\
+    // EVENT BUS\
+    // ========================================\
+    window.HandInput = (() => \{\
+      const listeners = new Map();\
+\
+      return \{\
+        on(type, handler) \{\
+          if (!listeners.has(type)) listeners.set(type, new Set());\
+          listeners.get(type).add(handler);\
+        \},\
+        off(type, handler) \{\
+          if (listeners.has(type)) listeners.get(type).delete(handler);\
+        \},\
+        emit(type, data) \{\
+          if (listeners.has(type)) \{\
+            listeners.get(type).forEach(handler => handler(data));\
+          \}\
+        \}\
+      \};\
+    \})();\
+\
+    // ========================================\
+    // HELPERS\
+    // ========================================\
+    function ema(value, key, alpha = 0.3) \{\
+      if (!state.emaCache.has(key)) \{\
+        state.emaCache.set(key, value);\
+        return value;\
+      \}\
+      const smoothed = alpha * value + (1 - alpha) * state.emaCache.get(key);\
+      state.emaCache.set(key, smoothed);\
+      return smoothed;\
+    \}\
+\
+    function distance(p1, p2) \{\
+      const dx = p1.x - p2.x;\
+      const dy = p1.y - p2.y;\
+      const dz = (p1.z || 0) - (p2.z || 0);\
+      return Math.sqrt(dx * dx + dy * dy + dz * dz);\
+    \}\
+\
+    function distance2D(p1, p2) \{\
+      const dx = p1.x - p2.x;\
+      const dy = p1.y - p2.y;\
+      return Math.sqrt(dx * dx + dy * dy);\
+    \}\
+\
+    function pinchDistance(thumbTip, indexTip, width, height) \{\
+      const dx = (thumbTip.x - indexTip.x) * width;\
+      const dy = (thumbTip.y - indexTip.y) * height;\
+      return Math.sqrt(dx * dx + dy * dy);\
+    \}\
+\
+    // Calculate hand size for normalization\
+    function getHandSize(landmarks) \{\
+      const wrist = landmarks[LANDMARKS.WRIST];\
+      const middleMcp = landmarks[LANDMARKS.MIDDLE_MCP];\
+      const middleTip = landmarks[LANDMARKS.MIDDLE_TIP];\
+\
+      // Palm size: wrist to middle MCP\
+      const palmSize = distance(wrist, middleMcp);\
+\
+      // Hand length: wrist to middle tip\
+      const handLength = distance(wrist, middleTip);\
+\
+      return \{ palmSize, handLength \};\
+    \}\
+\
+    // Calculate angle between three points (in degrees)\
+    function calculateAngle(p1, p2, p3) \{\
+      // p2 is the vertex\
+      const v1 = \{ x: p1.x - p2.x, y: p1.y - p2.y, z: p1.z - p2.z \};\
+      const v2 = \{ x: p3.x - p2.x, y: p3.y - p2.y, z: p3.z - p2.z \};\
+\
+      const dot = v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;\
+      const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y + v1.z * v1.z);\
+      const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y + v2.z * v2.z);\
+\
+      const cosAngle = dot / (mag1 * mag2);\
+      const angle = Math.acos(Math.max(-1, Math.min(1, cosAngle)));\
+\
+      return angle * 180 / Math.PI;\
+    \}\
+\
+    // Check if finger is extended using angle-based method\
+    function isFingerExtended(landmarks, tipIdx, dipIdx, pipIdx, mcpIdx) \{\
+      // For fingers with DIP joint\
+      if (dipIdx) \{\
+        const tip = landmarks[tipIdx];\
+        const dip = landmarks[dipIdx];\
+        const pip = landmarks[pipIdx];\
+        const mcp = landmarks[mcpIdx];\
+\
+        // Calculate angles at PIP and DIP joints\
+        const pipAngle = calculateAngle(mcp, pip, dip);\
+        const dipAngle = calculateAngle(pip, dip, tip);\
+\
+        // Extended finger: both angles should be > 140 degrees (nearly straight)\
+        // Curled finger: angles < 120 degrees\
+        return pipAngle > 140 && dipAngle > 140;\
+      \} else \{\
+        // For thumb (no DIP)\
+        const tip = landmarks[tipIdx];\
+        const pip = landmarks[pipIdx];\
+        const mcp = landmarks[mcpIdx];\
+\
+        const angle = calculateAngle(mcp, pip, tip);\
+        return angle > 130;\
+      \}\
+    \}\
+\
+    // Get finger curl amount (0 = fully extended, 1 = fully curled)\
+    function getFingerCurl(landmarks, tipIdx, dipIdx, pipIdx, mcpIdx) \{\
+      if (dipIdx) \{\
+        const tip = landmarks[tipIdx];\
+        const dip = landmarks[dipIdx];\
+        const pip = landmarks[pipIdx];\
+        const mcp = landmarks[mcpIdx];\
+\
+        const pipAngle = calculateAngle(mcp, pip, dip);\
+        const dipAngle = calculateAngle(pip, dip, tip);\
+\
+        // Average angle: 180 = straight, 0 = fully curled\
+        const avgAngle = (pipAngle + dipAngle) / 2;\
+\
+        // Convert to curl: 0 = extended (180\'b0), 1 = curled (0\'b0)\
+        return 1 - (avgAngle / 180);\
+      \} else \{\
+        const tip = landmarks[tipIdx];\
+        const pip = landmarks[pipIdx];\
+        const mcp = landmarks[mcpIdx];\
+\
+        const angle = calculateAngle(mcp, pip, tip);\
+        return 1 - (angle / 180);\
+      \}\
+    \}\
+\
+    // Calculate hand openness (normalized 0-1)\
+    function calculateHandSpread(landmarks, handSize) \{\
+      const thumbTip = landmarks[LANDMARKS.THUMB_TIP];\
+      const indexTip = landmarks[LANDMARKS.INDEX_TIP];\
+      const middleTip = landmarks[LANDMARKS.MIDDLE_TIP];\
+      const ringTip = landmarks[LANDMARKS.RING_TIP];\
+      const pinkyTip = landmarks[LANDMARKS.PINKY_TIP];\
+\
+      // Total spread across fingertips\
+      const spread =\
+        distance(thumbTip, indexTip) +\
+        distance(indexTip, middleTip) +\
+        distance(middleTip, ringTip) +\
+        distance(ringTip, pinkyTip);\
+\
+      // Normalize by hand length (typical max spread is ~2x hand length)\
+      return Math.min(1, spread / (handSize.handLength * 2));\
+    \}\
+\
+    // Calculate average finger curl\
+    function calculateHandCurl(landmarks) \{\
+      const indexCurl = getFingerCurl(landmarks, LANDMARKS.INDEX_TIP, LANDMARKS.INDEX_DIP, LANDMARKS.INDEX_PIP, LANDMARKS.INDEX_MCP);\
+      const middleCurl = getFingerCurl(landmarks, LANDMARKS.MIDDLE_TIP, LANDMARKS.MIDDLE_DIP, LANDMARKS.MIDDLE_PIP, LANDMARKS.MIDDLE_MCP);\
+      const ringCurl = getFingerCurl(landmarks, LANDMARKS.RING_TIP, LANDMARKS.RING_DIP, LANDMARKS.RING_PIP, LANDMARKS.RING_MCP);\
+      const pinkyCurl = getFingerCurl(landmarks, LANDMARKS.PINKY_TIP, LANDMARKS.PINKY_DIP, LANDMARKS.PINKY_PIP, LANDMARKS.PINKY_MCP);\
+\
+      // Average curl (0 = all extended, 1 = all curled)\
+      return (indexCurl + middleCurl + ringCurl + pinkyCurl) / 4;\
+    \}\
+\
+    function palmFacingUp(landmarks) \{\
+      const wrist = landmarks[LANDMARKS.WRIST];\
+      const indexMcp = landmarks[LANDMARKS.INDEX_MCP];\
+      const pinkyMcp = landmarks[LANDMARKS.PINKY_MCP];\
+\
+      // Cross product to determine palm normal\
+      const v1 = \{ x: indexMcp.x - wrist.x, y: indexMcp.y - wrist.y, z: indexMcp.z - wrist.z \};\
+      const v2 = \{ x: pinkyMcp.x - wrist.x, y: pinkyMcp.y - wrist.y, z: pinkyMcp.z - wrist.z \};\
+\
+      const cross = \{\
+        x: v1.y * v2.z - v1.z * v2.y,\
+        y: v1.z * v2.x - v1.x * v2.z,\
+        z: v1.x * v2.y - v1.y * v2.x\
+      \};\
+\
+      // If z component is positive, palm is facing up (toward camera)\
+      return ema(cross.z > 0 ? 1 : 0, 'palmFacing', 0.4) > 0.5;\
+    \}\
+\
+    function computeVelocity(prev, curr, dt) \{\
+      if (!prev || dt === 0) return \{ vx: 0, vy: 0, speed: 0 \};\
+\
+      const vx = (curr.x - prev.x) / dt * 1000; // px/s\
+      const vy = (curr.y - prev.y) / dt * 1000;\
+      const speed = Math.sqrt(vx * vx + vy * vy);\
+\
+      return \{ vx, vy, speed \};\
+    \}\
+\
+    function angleDeg(vx, vy) \{\
+      return Math.atan2(vy, vx) * 180 / Math.PI;\
+    \}\
+\
+    function normalizeCoords(x, y, width, height, mirror = true) \{\
+      return \{\
+        nx: mirror ? 1 - x : x,\
+        ny: y,\
+        x: (mirror ? 1 - x : x) * width,\
+        y: y * height\
+      \};\
+    \}\
+\
+    // roundRect helper for browser compatibility\
+    function roundRect(ctx, x, y, w, h, r) \{\
+      ctx.beginPath();\
+      ctx.moveTo(x + r, y);\
+      ctx.arcTo(x + w, y, x + w, y + h, r);\
+      ctx.arcTo(x + w, y + h, x, y + h, r);\
+      ctx.arcTo(x, y + h, x, y, r);\
+      ctx.arcTo(x, y, x + w, y, r);\
+      ctx.closePath();\
+    \}\
+\
+    // ========================================\
+    // IMPROVED GESTURE HELPERS (ROBUST)\
+    // ========================================\
+\
+    // Vector operations for robust angle calculations\
+    function sub(a, b) \{\
+      return \{ x: a.x - b.x, y: a.y - b.y, z: (a.z || 0) - (b.z || 0) \};\
+    \}\
+\
+    function dot(u, v) \{\
+      return u.x * v.x + u.y * v.y + (u.z || 0) * (v.z || 0);\
+    \}\
+\
+    function mag(u) \{\
+      return Math.sqrt(u.x * u.x + u.y * u.y + (u.z || 0) * (u.z || 0));\
+    \}\
+\
+    function cosAngle(u, v) \{\
+      const m = mag(u) * mag(v);\
+      return m ? dot(u, v) / m : 1; // 1 = straight, -1 = folded\
+    \}\
+\
+    // Get robust hand scale for normalization (palm width)\
+    function getPalmScale(landmarks) \{\
+      const indexMcp = landmarks[LANDMARKS.INDEX_MCP];\
+      const pinkyMcp = landmarks[LANDMARKS.PINKY_MCP];\
+      return Math.sqrt(\
+        Math.pow(indexMcp.x - pinkyMcp.x, 2) +\
+        Math.pow(indexMcp.y - pinkyMcp.y, 2)\
+      );\
+    \}\
+\
+    // Normalized distance (scale-independent)\
+    function distNorm(p, q, scale) \{\
+      return Math.sqrt(\
+        Math.pow(p.x - q.x, 2) +\
+        Math.pow(p.y - q.y, 2)\
+      ) / (scale || 1);\
+    \}\
+\
+    // Improved finger extension metric using cosine angle\
+    // Returns 0-1: 1 = fully extended, 0 = fully curled\
+    function fingerExtensionScore(mcp, pip, dip, tip) \{\
+      const a = sub(pip, mcp);   // MCP->PIP direction\
+      const b = sub(tip, dip);   // DIP->TIP direction\
+      const cos = Math.max(-1, Math.min(1, cosAngle(a, b)));\
+      // Map cosine to [0..1]: 1 = extended (cos=1), 0 = curled (cos=-1)\
+      return (cos + 1) / 2;\
+    \}\
+\
+    // Check if thumb is folded (across palm or curled)\
+    function isThumbFolded(landmarks, palmScale) \{\
+      const thumbTip = landmarks[LANDMARKS.THUMB_TIP];\
+      const thumbIp = landmarks[LANDMARKS.THUMB_IP];\
+      const thumbMcp = landmarks[LANDMARKS.THUMB_MCP];\
+      const indexMcp = landmarks[LANDMARKS.INDEX_MCP];\
+      const wrist = landmarks[LANDMARKS.WRIST];\
+\
+      // Check 1: Thumb tip close to index MCP (across palm)\
+      const tipToIndexDist = distNorm(thumbTip, indexMcp, palmScale);\
+      const closeToIndexMcp = tipToIndexDist < 0.5; // Normalized threshold\
+\
+      // Check 2: Thumb tip close to wrist (tucked in)\
+      const tipToWristDist = distNorm(thumbTip, wrist, palmScale);\
+      const closeToWrist = tipToWristDist < 0.8;\
+\
+      // Check 3: Thumb angle (curled)\
+      const a = sub(thumbIp, thumbMcp);\
+      const b = sub(thumbTip, thumbIp);\
+      const cos = cosAngle(a, b);\
+      const curledByAngle = cos < 0.2; // Angle > ~78\'b0 (curled)\
+\
+      return closeToIndexMcp || closeToWrist || curledByAngle;\
+    \}\
+\
+    // Classify Fist with robust checks\
+    function classifyFist(landmarks, width, height) \{\
+      const palmScale = getPalmScale(landmarks);\
+\
+      // Calculate extension scores for each finger (0 = curled, 1 = extended)\
+      const extIndex = fingerExtensionScore(\
+        landmarks[LANDMARKS.INDEX_MCP],\
+        landmarks[LANDMARKS.INDEX_PIP],\
+        landmarks[LANDMARKS.INDEX_DIP],\
+        landmarks[LANDMARKS.INDEX_TIP]\
+      );\
+      const extMiddle = fingerExtensionScore(\
+        landmarks[LANDMARKS.MIDDLE_MCP],\
+        landmarks[LANDMARKS.MIDDLE_PIP],\
+        landmarks[LANDMARKS.MIDDLE_DIP],\
+        landmarks[LANDMARKS.MIDDLE_TIP]\
+      );\
+      const extRing = fingerExtensionScore(\
+        landmarks[LANDMARKS.RING_MCP],\
+        landmarks[LANDMARKS.RING_PIP],\
+        landmarks[LANDMARKS.RING_DIP],\
+        landmarks[LANDMARKS.RING_TIP]\
+      );\
+      const extPinky = fingerExtensionScore(\
+        landmarks[LANDMARKS.PINKY_MCP],\
+        landmarks[LANDMARKS.PINKY_PIP],\
+        landmarks[LANDMARKS.PINKY_DIP],\
+        landmarks[LANDMARKS.PINKY_TIP]\
+      );\
+\
+      // Count fingers that are clearly curled (extension < 0.4)\
+      const EXT_THRESHOLD = 0.4;\
+      const curledCount =\
+        (extIndex <= EXT_THRESHOLD ? 1 : 0) +\
+        (extMiddle <= EXT_THRESHOLD ? 1 : 0) +\
+        (extRing <= EXT_THRESHOLD ? 1 : 0) +\
+        (extPinky <= EXT_THRESHOLD ? 1 : 0);\
+\
+      // Check if fingertips are clustered near palm center\
+      const palmCenter = \{\
+        x: (landmarks[LANDMARKS.WRIST].x + landmarks[LANDMARKS.INDEX_MCP].x +\
+            landmarks[LANDMARKS.MIDDLE_MCP].x + landmarks[LANDMARKS.RING_MCP].x +\
+            landmarks[LANDMARKS.PINKY_MCP].x) / 5,\
+        y: (landmarks[LANDMARKS.WRIST].y + landmarks[LANDMARKS.INDEX_MCP].y +\
+            landmarks[LANDMARKS.MIDDLE_MCP].y + landmarks[LANDMARKS.RING_MCP].y +\
+            landmarks[LANDMARKS.PINKY_MCP].y) / 5\
+      \};\
+\
+      const tips = [\
+        landmarks[LANDMARKS.INDEX_TIP],\
+        landmarks[LANDMARKS.MIDDLE_TIP],\
+        landmarks[LANDMARKS.RING_TIP],\
+        landmarks[LANDMARKS.PINKY_TIP]\
+      ];\
+\
+      const avgTipDist = tips.reduce((acc, t) => acc + distNorm(t, palmCenter, palmScale), 0) / tips.length;\
+      const tipsClose = avgTipDist < 0.65; // Tips clustered near palm\
+\
+      // Check thumb\
+      const thumbFolded = isThumbFolded(landmarks, palmScale);\
+\
+      // Core fist condition: \uc0\u8805 3 fingers curled + thumb folded + tips close\
+      const isFist = curledCount >= 3 && thumbFolded && tipsClose;\
+\
+      // Calculate confidence\
+      const curlStrength = 1 - (extIndex + extMiddle + extRing + extPinky) / 4; // 0-1\
+      const tightness = Math.max(0, 1 - avgTipDist / 0.65); // 0-1\
+      const confidence = Math.max(0, Math.min(1,\
+        0.5 * curlStrength +\
+        0.3 * tightness +\
+        0.2 * (thumbFolded ? 1 : 0)\
+      ));\
+\
+      return \{\
+        isFist,\
+        confidence,\
+        extras: \{ extIndex, extMiddle, extRing, extPinky, avgTipDist, curledCount, thumbFolded \}\
+      \};\
+    \}\
+\
+    // ========================================\
+    // GESTURE RECOGNITION\
+    // ========================================\
+\
+    // Check if hand posture looks like a pinch (thumb+index extended, others relaxed)\
+    // This prevents accidental pinch detection from incidental finger contact during tapping\
+    function looksPinchPosture(hand) \{\
+      const s = hand.extensionScores || \{\};\
+      // index and thumb extended-ish, others not strongly extended\
+      const thumbExtended = hand.fingerExtensions?.thumb;\
+      const indexExtended = s.index > 0.55;\
+      const othersRelaxed = (s.middle < 0.55) && (s.ring < 0.55) && (s.pinky < 0.55);\
+      return !!thumbExtended && indexExtended && othersRelaxed;\
+    \}\
+\
+    function recognizeGesture(hand, width, height) \{\
+      const \{ landmarks \} = hand;\
+\
+      // Robust extension scores (0=curled, 1=straight)\
+      const sIndex = fingerExtensionScore(\
+        landmarks[LANDMARKS.INDEX_MCP],\
+        landmarks[LANDMARKS.INDEX_PIP],\
+        landmarks[LANDMARKS.INDEX_DIP],\
+        landmarks[LANDMARKS.INDEX_TIP]\
+      );\
+      const sMiddle = fingerExtensionScore(\
+        landmarks[LANDMARKS.MIDDLE_MCP],\
+        landmarks[LANDMARKS.MIDDLE_PIP],\
+        landmarks[LANDMARKS.MIDDLE_DIP],\
+        landmarks[LANDMARKS.MIDDLE_TIP]\
+      );\
+      const sRing = fingerExtensionScore(\
+        landmarks[LANDMARKS.RING_MCP],\
+        landmarks[LANDMARKS.RING_PIP],\
+        landmarks[LANDMARKS.RING_DIP],\
+        landmarks[LANDMARKS.RING_TIP]\
+      );\
+      const sPinky = fingerExtensionScore(\
+        landmarks[LANDMARKS.PINKY_MCP],\
+        landmarks[LANDMARKS.PINKY_PIP],\
+        landmarks[LANDMARKS.PINKY_DIP],\
+        landmarks[LANDMARKS.PINKY_TIP]\
+      );\
+\
+      // Soft criterion for "point": index extended, others curled\
+      const looksLikePoint =\
+        sIndex > 0.62 && sMiddle < 0.38 && sRing < 0.38 && sPinky < 0.38;\
+\
+      // Get hand size for normalization\
+      const handSize = getHandSize(landmarks);\
+\
+      // Finger extension states (angle-based)\
+      const thumbExt = isFingerExtended(landmarks, LANDMARKS.THUMB_TIP, null, LANDMARKS.THUMB_IP, LANDMARKS.THUMB_MCP);\
+      const indexExt = isFingerExtended(landmarks, LANDMARKS.INDEX_TIP, LANDMARKS.INDEX_DIP, LANDMARKS.INDEX_PIP, LANDMARKS.INDEX_MCP);\
+      const middleExt = isFingerExtended(landmarks, LANDMARKS.MIDDLE_TIP, LANDMARKS.MIDDLE_DIP, LANDMARKS.MIDDLE_PIP, LANDMARKS.MIDDLE_MCP);\
+      const ringExt = isFingerExtended(landmarks, LANDMARKS.RING_TIP, LANDMARKS.RING_DIP, LANDMARKS.RING_PIP, LANDMARKS.RING_MCP);\
+      const pinkyExt = isFingerExtended(landmarks, LANDMARKS.PINKY_TIP, LANDMARKS.PINKY_DIP, LANDMARKS.PINKY_PIP, LANDMARKS.PINKY_MCP);\
+\
+      // Finger curl values (0 = extended, 1 = curled)\
+      const indexCurl = getFingerCurl(landmarks, LANDMARKS.INDEX_TIP, LANDMARKS.INDEX_DIP, LANDMARKS.INDEX_PIP, LANDMARKS.INDEX_MCP);\
+      const middleCurl = getFingerCurl(landmarks, LANDMARKS.MIDDLE_TIP, LANDMARKS.MIDDLE_DIP, LANDMARKS.MIDDLE_PIP, LANDMARKS.MIDDLE_MCP);\
+      const ringCurl = getFingerCurl(landmarks, LANDMARKS.RING_TIP, LANDMARKS.RING_DIP, LANDMARKS.RING_PIP, LANDMARKS.RING_MCP);\
+      const pinkyCurl = getFingerCurl(landmarks, LANDMARKS.PINKY_TIP, LANDMARKS.PINKY_DIP, LANDMARKS.PINKY_PIP, LANDMARKS.PINKY_MCP);\
+\
+      const allExtended = thumbExt && indexExt && middleExt && ringExt && pinkyExt;\
+      const fourExtended = indexExt && middleExt && ringExt && pinkyExt;\
+      const allCurled = !indexExt && !middleExt && !ringExt && !pinkyExt;\
+\
+      // Calculate hand metrics (normalized 0-1)\
+      const handSpread = calculateHandSpread(landmarks, handSize);\
+      const handCurl = calculateHandCurl(landmarks);\
+\
+      // Pinch distance\
+      const pinchDist = pinchDistance(\
+        landmarks[LANDMARKS.THUMB_TIP],\
+        landmarks[LANDMARKS.INDEX_TIP],\
+        width, height\
+      );\
+\
+      // Palm facing\
+      const palmUp = palmFacingUp(landmarks);\
+\
+      // Gesture rules with confidence\
+      let gesture = 'Unknown';\
+      let confidence = 0.5;\
+\
+      // PRIORITY ORDER (most specific first)\
+\
+      // 1. FIST - Use robust classification with high priority\
+      const fistResult = classifyFist(landmarks, width, height);\
+      // ALWAYS store fist debug info (even if not detected, for debugging)\
+      hand.fistExtras = fistResult.extras;\
+\
+      if (fistResult.isFist && fistResult.confidence >= 0.55) \{\
+        gesture = 'Fist';\
+        confidence = Math.max(0.85, fistResult.confidence);\
+      \}\
+      // 2. Pinch (highest priority when close) - but only if not a fist\
+      else if (pinchDist < CONFIG.pinchPx) \{\
+        gesture = 'Pinch';\
+        confidence = Math.max(0.75, 1 - pinchDist / CONFIG.pinchPx);\
+      \}\
+      // 3. Open Palm (all extended with low curl and high spread)\
+      else if ((allExtended || fourExtended) && handCurl < 0.35 && handSpread > 0.35) \{\
+        gesture = 'OpenPalm';\
+        confidence = 0.92;\
+      \}\
+      // 4. Point \'97 use robust scores, ignore thumb state\
+      else if (looksLikePoint) \{\
+        gesture = 'Point';\
+        // Confidence maps how clearly the "others" are curled and index is straight\
+        const nonIndexCurl = 1 - ((sMiddle + sRing + sPinky) / 3);\
+        confidence = Math.min(0.95, 0.55 + 0.45 * Math.min(1, sIndex) * Math.max(0, nonIndexCurl));\
+      \}\
+      // 5. PartialOpen \'97 only if it's NOT a point\
+      else if (!looksLikePoint && fistResult.extras) \{\
+        const ext = fistResult.extras;\
+        const softOpenCount =\
+          (ext.extIndex > 0.4 && ext.extIndex < 0.7 ? 1 : 0) +\
+          (ext.extMiddle > 0.4 && ext.extMiddle < 0.7 ? 1 : 0) +\
+          (ext.extRing > 0.4 && ext.extRing < 0.7 ? 1 : 0) +\
+          (ext.extPinky > 0.4 && ext.extPinky < 0.7 ? 1 : 0);\
+\
+        if (softOpenCount >= 1 && ext.curledCount < 3) \{\
+          gesture = 'PartialOpen';\
+          confidence = 0.72;\
+        \}\
+      \}\
+      // 6. Fallback PartialOpen \'97 only if NOT a point\
+      else if (!looksLikePoint && handCurl < 0.50 && handSpread > 0.25 && !fistResult.isFist) \{\
+        gesture = 'PartialOpen';\
+        confidence = 0.70;\
+      \}\
+\
+      // Store detailed metrics for debugging\
+      hand.handSpread = handSpread;\
+      hand.handCurl = handCurl;\
+      hand.fingerCurls = \{ index: indexCurl, middle: middleCurl, ring: ringCurl, pinky: pinkyCurl \};\
+      hand.fingerExtensions = \{ thumb: thumbExt, index: indexExt, middle: middleExt, ring: ringExt, pinky: pinkyExt \};\
+      hand.extensionScores = \{ index: sIndex, middle: sMiddle, ring: sRing, pinky: sPinky \}; // Cosine-based scores\
+      hand.looksLikePoint = looksLikePoint;\
+      hand.fistDetected = fistResult.isFist;\
+      hand.fistConfidence = fistResult.confidence;\
+\
+      // Smooth gesture with history\
+      if (!hand.gestureHistory) hand.gestureHistory = [];\
+      hand.gestureHistory.push(\{ gesture, confidence, time: Date.now() \});\
+\
+      // Keep only recent history\
+      const cutoff = Date.now() - 350;\
+      hand.gestureHistory = hand.gestureHistory.filter(g => g.time > cutoff);\
+\
+      // Most common gesture in window\
+      const gestureCounts = new Map();\
+      hand.gestureHistory.forEach(g => \{\
+        gestureCounts.set(g.gesture, (gestureCounts.get(g.gesture) || 0) + 1);\
+      \});\
+\
+      let maxCount = 0;\
+      let stableGesture = gesture;\
+      let stableConfidence = confidence;\
+\
+      gestureCounts.forEach((count, gest) => \{\
+        if (count > maxCount) \{\
+          maxCount = count;\
+          stableGesture = gest;\
+          const matches = hand.gestureHistory.filter(g => g.gesture === gest);\
+          stableConfidence = matches.reduce((sum, g) => sum + g.confidence, 0) / matches.length;\
+        \}\
+      \});\
+\
+      // Only use stable gesture if it has good support\
+      if (maxCount < 2) \{\
+        return \{ gesture, confidence, pinchDist \};\
+      \}\
+\
+      return \{ gesture: stableGesture, confidence: stableConfidence, pinchDist \};\
+    \}\
+\
+    function detectSwipe(hand, width, height) \{\
+      if (!hand.velocityHistory) hand.velocityHistory = [];\
+\
+      const \{ vx, vy, speed \} = hand.velocity;\
+      hand.velocityHistory.push(\{ vx, vy, speed, time: Date.now() \});\
+\
+      // Keep recent history\
+      const cutoff = Date.now() - 500;\
+      hand.velocityHistory = hand.velocityHistory.filter(v => v.time > cutoff);\
+\
+      // Find peak speed\
+      const peak = hand.velocityHistory.reduce((max, v) => v.speed > max.speed ? v : max, \{ speed: 0 \});\
+\
+      if (peak.speed > CONFIG.swipeSpeedPxPerSec && peak.time > (hand.lastSwipeTime || 0) + 500) \{\
+        const angle = angleDeg(peak.vx, peak.vy);\
+        const tolerance = CONFIG.swipeAngleToleranceDeg;\
+\
+        let direction = null;\
+        if (Math.abs(angle) < tolerance) direction = 'right';\
+        else if (Math.abs(angle - 180) < tolerance || Math.abs(angle + 180) < tolerance) direction = 'left';\
+        else if (Math.abs(angle - 90) < tolerance) direction = 'down';\
+        else if (Math.abs(angle + 90) < tolerance) direction = 'up';\
+\
+        if (direction) \{\
+          hand.lastSwipeTime = Date.now();\
+          return \{ direction, speed: peak.speed \};\
+        \}\
+      \}\
+\
+      return null;\
+    \}\
+\
+    // Initialize tap state for a hand\
+    function ensureTapState(hand) \{\
+      if (hand._tapInit) return;\
+      hand._tapInit = true;\
+      hand.zRelBaseline = 0;         // baseline zRel when Point gesture detected\
+      hand.baselineSet = false;      // whether we've set baseline yet\
+      hand.cooldownUntil = 0;        // cooldown timestamp\
+      hand.lastTapTime = 0;          // for double-tap detection\
+      hand.tapMovement = 0;          // current zRel movement from baseline (for debug)\
+      hand._tapArmed = false;        // hysteresis state for tap arming\
+      hand.baselineTime = 0;         // timestamp when baseline was set (for time guard)\
+      hand.baselinePos = \{ nx: 0, ny: 0 \}; // palm position when baseline was set (for lateral guard)\
+    \}\
+\
+    // Compute relative z (index tip vs palm center), positive = toward camera\
+    function relativeZ(hand) \{\
+      const lm = hand.landmarks;\
+      const tip = lm[LANDMARKS.INDEX_TIP];\
+      const palm =\
+        (lm[LANDMARKS.WRIST].z + lm[LANDMARKS.INDEX_MCP].z +\
+         lm[LANDMARKS.MIDDLE_MCP].z + lm[LANDMARKS.RING_MCP].z +\
+         lm[LANDMARKS.PINKY_MCP].z) / 5;\
+\
+      // MediaPipe: more negative = closer to camera.\
+      // Flip sign so "toward camera" is positive for our tap logic.\
+      const rawToward = -(tip.z - palm); // >0 when jabbing forward\
+      return ema(rawToward, `$\{hand.id\}_zrel`, 0.6); // Higher alpha (0.6) for faster response to jabs\
+    \}\
+\
+    // Improved tap detector with hysteresis, time/lateral guards, and double-tap support\
+    function detectTap(hand, width, height, dtSec) \{\
+      ensureTapState(hand);\
+      const now = Date.now();\
+      const gap = now - (hand.lastTapTime || 0);\
+\
+      // Allow second tap through even during cooldown if within double-tap window\
+      const allowDoubleWindow = hand.lastTapTime &&\
+        gap >= TAP.doubleMinMs && gap <= TAP.doubleMaxMs;\
+\
+      if (now < hand.cooldownUntil && !allowDoubleWindow) \{\
+        return 0;\
+      \}\
+\
+      // Only arm taps on Point gesture (strict gating to reduce false positives)\
+      const isPointish = (hand.gesture === 'Point');\
+\
+      // Get current zRel (now smoothed)\
+      const zRel = relativeZ(hand);\
+\
+      // If not Point-ish gesture, reset state\
+      if (!isPointish) \{\
+        hand.baselineSet = false;\
+        hand.tapMovement = 0;\
+        hand._tapArmed = false;\
+        return 0;\
+      \}\
+\
+      // Point-ish gesture is active - set baseline if not set\
+      if (!hand.baselineSet) \{\
+        hand.zRelBaseline = zRel;\
+        hand.baselineSet = true;\
+        hand.baselineTime = now;\
+        hand.baselinePos = \{ nx: hand.palm.nx, ny: hand.palm.ny \};\
+        hand.tapMovement = 0;\
+        hand._tapArmed = false;\
+        console.log(`\uc0\u55357 \u56525  [TAP] Baseline set - zRel: $\{zRel.toFixed(4)\}`);\
+        return 0;\
+      \}\
+\
+      // Calculate movement from baseline (positive = toward camera)\
+      const movement = zRel - hand.zRelBaseline;\
+      hand.tapMovement = movement; // Store for debug panel\
+\
+      // Hysteresis thresholds\
+      const entered = movement >= TAP.minMovement;\
+      const exited = movement <= TAP.minMovement * 0.4;\
+\
+      // Time guard: tap must happen within tapWindowMs\
+      if (now - hand.baselineTime > TAP.tapWindowMs) \{\
+        // Too slow, reset baseline\
+        hand.zRelBaseline = zRel;\
+        hand.baselineTime = now;\
+        hand.baselinePos = \{ nx: hand.palm.nx, ny: hand.palm.ny \};\
+        hand._tapArmed = false;\
+        return 0;\
+      \}\
+\
+      // Lateral movement guard: hand must not move sideways too much\
+      const lateral = Math.sqrt(\
+        Math.pow((hand.palm.nx - hand.baselinePos.nx) * width, 2) +\
+        Math.pow((hand.palm.ny - hand.baselinePos.ny) * height, 2)\
+      );\
+      if (lateral > TAP.maxLateralPx) \{\
+        // Too much lateral movement, reset baseline\
+        hand.zRelBaseline = zRel;\
+        hand.baselineTime = now;\
+        hand.baselinePos = \{ nx: hand.palm.nx, ny: hand.palm.ny \};\
+        hand._tapArmed = false;\
+        console.log(`\uc0\u9888 \u65039  [TAP] Lateral movement too large ($\{lateral.toFixed(1)\}px), resetting baseline`);\
+        return 0;\
+      \}\
+\
+      // Arm tap when entering the detection band\
+      if (!hand._tapArmed && entered && movement <= TAP.maxMovement) \{\
+        hand._tapArmed = true;\
+        console.log(`\uc0\u55356 \u57263  [TAP] Armed - movement: $\{movement.toFixed(4)\}`);\
+      \}\
+\
+      // Trigger tap when armed and still in valid range\
+      if (hand._tapArmed && movement >= TAP.minMovement && movement <= TAP.maxMovement) \{\
+        // Tap detected!\
+        hand._tapArmed = false;\
+        hand.baselineSet = false;\
+        hand.cooldownUntil = now + TAP.cooldownMs;\
+\
+        // Check for double tap\
+        let count = 1;\
+        if (hand.lastTapTime &&\
+            gap >= TAP.doubleMinMs &&\
+            gap <= TAP.doubleMaxMs) \{\
+          count = 2;\
+          hand.lastTapTime = 0; // Reset after double tap\
+        \} else \{\
+          hand.lastTapTime = now;\
+        \}\
+\
+        console.log(`\uc0\u9989  [TAP] DETECTED - Count: $\{count\}, movement: $\{movement.toFixed(4)\}, lateral: $\{lateral.toFixed(1)\}px`);\
+        return count;\
+      \}\
+\
+      // Disarm if overshoot (but keep baseline for potential retry)\
+      if (hand._tapArmed && movement > TAP.maxMovement) \{\
+        hand._tapArmed = false;\
+        console.log(`\uc0\u9888 \u65039  [TAP] Overshot ($\{movement.toFixed(4)\}), disarmed but keeping baseline`);\
+      \}\
+\
+      // If pulled back too far while not armed, refresh baseline\
+      if (!hand._tapArmed && exited) \{\
+        hand.zRelBaseline = zRel;\
+        hand.baselineTime = now;\
+        hand.baselinePos = \{ nx: hand.palm.nx, ny: hand.palm.ny \};\
+      \}\
+\
+      // DEBUG: Log current values periodically\
+      if (!hand._debugLogThrottle) \{\
+        const status = hand._tapArmed ? '\uc0\u55356 \u57263  ARMED' : '\u9203  waiting';\
+        console.log(`[DEBUG] $\{status\} - movement: $\{movement.toFixed(4)\}, lateral: $\{lateral.toFixed(1)\}px, range: $\{TAP.minMovement\}-$\{TAP.maxMovement\}`);\
+        hand._debugLogThrottle = true;\
+        setTimeout(() => hand._debugLogThrottle = false, 200);\
+      \}\
+\
+      return 0;\
+    \}\
+\
+    function detectPinch(hand, pinchDist) \{\
+      const isPinching = pinchDist < CONFIG.pinchPx;\
+\
+      if (isPinching && !hand.pinching) \{\
+        hand.pinching = true;\
+        hand.pinchStartTime = Date.now();\
+        return 'start';\
+      \} else if (isPinching && hand.pinching) \{\
+        const duration = Date.now() - hand.pinchStartTime;\
+        if (duration > CONFIG.pinchHoldMs) \{\
+          return 'hold';\
+        \}\
+      \} else if (!isPinching && hand.pinching) \{\
+        hand.pinching = false;\
+        return 'end';\
+      \}\
+\
+      return null;\
+    \}\
+\
+    function detectOverlap(hands) \{\
+      if (hands.length !== 2) return null;\
+\
+      const [h1, h2] = hands;\
+      // Use palm.x and palm.y which are already in display pixels\
+      const dist = distance2D(\
+        \{ x: h1.palm.x, y: h1.palm.y \},\
+        \{ x: h2.palm.x, y: h2.palm.y \}\
+      );\
+\
+      const overlapping = dist < CONFIG.overlapPx;\
+\
+      if (overlapping && !state.handsOverlapping) \{\
+        state.handsOverlapping = true;\
+        return 'enter';\
+      \} else if (!overlapping && state.handsOverlapping) \{\
+        state.handsOverlapping = false;\
+        return 'leave';\
+      \}\
+\
+      return null;\
+    \}\
+\
+    // DISABLED: Zoom functionality removed temporarily\
+    /*\
+    // Detect single-hand zoom based on index+middle finger spread transitions\
+    // Closed\uc0\u8594 Open = Zoom IN, Open\u8594 Closed = Zoom OUT\
+    function detectSingleHandZoom(hand) \{\
+      const landmarks = hand.landmarks;\
+\
+      // Measure tip-to-pip distances for index and middle fingers\
+      const indexTip = landmarks[LANDMARKS.INDEX_TIP];\
+      const indexPip = landmarks[LANDMARKS.INDEX_PIP];\
+      const middleTip = landmarks[LANDMARKS.MIDDLE_TIP];\
+      const middlePip = landmarks[LANDMARKS.MIDDLE_PIP];\
+\
+      const indexSpread = distance(indexTip, indexPip);\
+      const middleSpread = distance(middleTip, middlePip);\
+\
+      // Average spread\
+      const currentSpread = (indexSpread + middleSpread) / 2;\
+\
+      // Initialize baseline and state\
+      if (!hand.zoomBaseline) \{\
+        hand.zoomBaseline = currentSpread;\
+        hand.zoomState = 'unknown'; // 'closed', 'open', or 'unknown'\
+        hand.lastZoomSpread = currentSpread;\
+        hand.zoomCooldown = 0;\
+        return null;\
+      \}\
+\
+      // Smooth the spread value\
+      const smoothedSpread = currentSpread * 0.3 + hand.lastZoomSpread * 0.7;\
+      hand.lastZoomSpread = smoothedSpread;\
+\
+      // Determine if currently closed or open based on baseline\
+      const threshold = hand.zoomBaseline * 0.25; // 25% threshold\
+      const isClosed = smoothedSpread < hand.zoomBaseline + threshold;\
+      const isOpen = smoothedSpread > hand.zoomBaseline + threshold * 2;\
+\
+      // Cooldown to prevent rapid re-triggering\
+      const now = Date.now();\
+      if (hand.zoomCooldown > now) \{\
+        return null;\
+      \}\
+\
+      let result = null;\
+\
+      // Detect state transitions\
+      if (hand.zoomState === 'closed' && isOpen) \{\
+        // Transition from closed to open = ZOOM IN\
+        result = \{\
+          mode: 'in',\
+          factor: 1.15, // Discrete zoom step\
+          source: 'single-hand'\
+        \};\
+        hand.zoomState = 'open';\
+        hand.zoomCooldown = now + 500; // 500ms cooldown\
+      \} else if (hand.zoomState === 'open' && isClosed) \{\
+        // Transition from open to closed = ZOOM OUT\
+        result = \{\
+          mode: 'out',\
+          factor: 0.85, // Discrete zoom step\
+          source: 'single-hand'\
+        \};\
+        hand.zoomState = 'closed';\
+        hand.zoomCooldown = now + 500;\
+      \} else if (hand.zoomState === 'unknown') \{\
+        // Initialize state\
+        if (isClosed) \{\
+          hand.zoomState = 'closed';\
+        \} else if (isOpen) \{\
+          hand.zoomState = 'open';\
+        \}\
+      \}\
+\
+      // Slowly adapt baseline\
+      hand.zoomBaseline = hand.zoomBaseline * 0.98 + currentSpread * 0.02;\
+\
+      return result;\
+    \}\
+\
+    function detectTwoHandZoom(hands) \{\
+      if (hands.length !== 2) return null;\
+\
+      const [h1, h2] = hands;\
+      // Use display-pixel coords\
+      const span = distance2D(\
+        \{ x: h1.landmarks[LANDMARKS.INDEX_TIP].x * state.videoDisplayWidth,\
+          y: h1.landmarks[LANDMARKS.INDEX_TIP].y * state.videoDisplayHeight \},\
+        \{ x: h2.landmarks[LANDMARKS.INDEX_TIP].x * state.videoDisplayWidth,\
+          y: h2.landmarks[LANDMARKS.INDEX_TIP].y * state.videoDisplayHeight \}\
+      );\
+\
+      if (!state.prevTwoHandSpan) \{\
+        state.prevTwoHandSpan = span;\
+        state.twoHandZoomStartTime = Date.now();\
+        return null;\
+      \}\
+\
+      const delta = span - state.prevTwoHandSpan;\
+      const duration = Date.now() - state.twoHandZoomStartTime;\
+\
+      if (Math.abs(delta) > 10 && duration > CONFIG.twoHandZoomHoldMs) \{\
+        state.prevTwoHandSpan = span;\
+        return \{\
+          mode: delta > 0 ? 'in' : 'out',\
+          factor: 1 + delta * CONFIG.zoomFactorPerPx,\
+          source: 'two-hands'\
+        \};\
+      \}\
+\
+      state.prevTwoHandSpan = span;\
+      return null;\
+    \}\
+    */\
+    // END DISABLED ZOOM FUNCTIONS\
+\
+    // ========================================\
+    // HAND TRACKING & STATE MANAGEMENT\
+    // ========================================\
+    function updateHands(results, dt) \{\
+      const newHands = new Map();\
+      // Use display dimensions for coordinate conversion\
+      const width = state.videoDisplayWidth || canvas.width;\
+      const height = state.videoDisplayHeight || canvas.height;\
+\
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) \{\
+        results.multiHandLandmarks.forEach((landmarks, idx) => \{\
+          const handedness = results.multiHandedness[idx].label; // "Left" or "Right"\
+\
+          // Try to match with existing hand\
+          let handId = null;\
+          const wrist = landmarks[LANDMARKS.WRIST];\
+          const normalized = normalizeCoords(wrist.x, wrist.y, width, height, CONFIG.mirrorVideo);\
+\
+          for (const [existingId, existingHand] of state.hands) \{\
+            if (existingHand.handedness === handedness) \{\
+              const dist = distance2D(normalized, existingHand.palm);\
+              if (dist < 100) \{ // Proximity threshold\
+                handId = existingId;\
+                break;\
+              \}\
+            \}\
+          \}\
+\
+          // Create new hand if not matched\
+          if (!handId) \{\
+            handId = `$\{handedness\}_$\{Date.now()\}`;\
+          \}\
+\
+          // Get previous hand state\
+          const prevHand = state.hands.get(handId);\
+\
+          // Compute velocity\
+          const velocity = prevHand\
+            ? computeVelocity(prevHand.palm, normalized, dt)\
+            : \{ vx: 0, vy: 0, speed: 0 \};\
+\
+          // Smooth velocity\
+          const smoothVx = ema(velocity.vx, `$\{handId\}_vx`, 0.5);\
+          const smoothVy = ema(velocity.vy, `$\{handId\}_vy`, 0.5);\
+          const smoothSpeed = Math.sqrt(smoothVx * smoothVx + smoothVy * smoothVy);\
+\
+          // Compute average z (depth proxy)\
+          const avgZ = landmarks.reduce((sum, lm) => sum + lm.z, 0) / landmarks.length;\
+\
+          // Build hand state\
+          const hand = \{\
+            id: handId,\
+            handedness,\
+            landmarks,\
+            palm: normalized,\
+            velocity: \{ vx: smoothVx, vy: smoothVy, speed: smoothSpeed \},\
+            z: avgZ,\
+            lastSeen: Date.now(),\
+            // Carry over persistent state\
+            gestureHistory: prevHand?.gestureHistory || [],\
+            velocityHistory: prevHand?.velocityHistory || [],\
+            tapHistory: prevHand?.tapHistory || [],\
+            tapping: prevHand?.tapping || false,\
+            tapStartTime: prevHand?.tapStartTime || 0,\
+            prevIndexZ: prevHand?.prevIndexZ,\
+            pinching: prevHand?.pinching || false,\
+            pinchStartTime: prevHand?.pinchStartTime || 0,\
+            lastSwipeTime: prevHand?.lastSwipeTime || 0,\
+            lastGestureEmitTime: prevHand?.lastGestureEmitTime || 0\
+          \};\
+\
+          // Recognize gesture\
+          const \{ gesture, confidence, pinchDist \} = recognizeGesture(hand, width, height);\
+          hand.gesture = gesture;\
+          hand.gestureConfidence = confidence;\
+          hand.pinchDist = pinchDist;\
+\
+          // Detect swipe\
+          const swipe = detectSwipe(hand, width, height);\
+          if (swipe) \{\
+            HandInput.emit('swipe', \{\
+              direction: swipe.direction,\
+              speed: swipe.speed,\
+              handedness: hand.handedness,\
+              time: Date.now()\
+            \});\
+          \}\
+\
+          // Detect tap (convert dt from ms to seconds)\
+          const dtSec = dt / 1000;\
+          const tapCount = detectTap(hand, width, height, dtSec);\
+          if (tapCount > 0) \{\
+            HandInput.emit('tap', \{\
+              count: tapCount,\
+              nx: normalized.nx,\
+              ny: normalized.ny,\
+              handedness: hand.handedness,\
+              time: Date.now()\
+            \});\
+          \}\
+\
+          // Detect pinch\
+          const pinchState = detectPinch(hand, pinchDist);\
+          if (pinchState) \{\
+            HandInput.emit('pinch', \{\
+              state: pinchState,\
+              distance: pinchDist,\
+              nx: normalized.nx,\
+              ny: normalized.ny,\
+              handedness: hand.handedness,\
+              time: Date.now()\
+            \});\
+          \}\
+\
+          // DISABLED: Single-hand zoom\
+          /*\
+          const singleZoom = detectSingleHandZoom(hand);\
+          if (singleZoom) \{\
+            HandInput.emit('zoom', \{\
+              mode: singleZoom.mode,\
+              factor: singleZoom.factor,\
+              source: singleZoom.source,\
+              handedness: hand.handedness,\
+              time: Date.now()\
+            \});\
+          \}\
+          */\
+\
+          // Emit handmove\
+          HandInput.emit('handmove', \{\
+            nx: normalized.nx,\
+            ny: normalized.ny,\
+            vx: smoothVx,\
+            vy: smoothVy,\
+            speed: smoothSpeed,\
+            z: avgZ,\
+            handedness: hand.handedness,\
+            time: Date.now()\
+          \});\
+\
+          // Emit gesture periodically\
+          if (confidence >= CONFIG.minConfidence) \{\
+            if (Date.now() - hand.lastGestureEmitTime > 200) \{\
+              HandInput.emit('gesture', \{\
+                name: gesture,\
+                confidence,\
+                handedness: hand.handedness,\
+                time: Date.now()\
+              \});\
+              hand.lastGestureEmitTime = Date.now();\
+            \}\
+\
+            // Emit gesture change\
+            if (prevHand && prevHand.gesture !== gesture) \{\
+              HandInput.emit('gesturechange', \{\
+                from: prevHand.gesture,\
+                to: gesture,\
+                confidence,\
+                handedness: hand.handedness,\
+                time: Date.now()\
+              \});\
+            \}\
+          \}\
+\
+          newHands.set(handId, hand);\
+        \});\
+      \}\
+\
+      // Handle lost hands\
+      for (const [handId, hand] of state.hands) \{\
+        if (!newHands.has(handId)) \{\
+          if (Date.now() - hand.lastSeen < CONFIG.lostTimeoutMs) \{\
+            newHands.set(handId, hand); // Keep temporarily\
+          \}\
+        \}\
+      \}\
+\
+      state.hands = newHands;\
+\
+      // Two-hand gestures\
+      const handsArray = Array.from(state.hands.values());\
+\
+      const overlapState = detectOverlap(handsArray);\
+      if (overlapState) \{\
+        const dist = handsArray.length === 2\
+          ? distance2D(\
+              \{ x: handsArray[0].palm.x, y: handsArray[0].palm.y \},\
+              \{ x: handsArray[1].palm.x, y: handsArray[1].palm.y \}\
+            )\
+          : 0;\
+        HandInput.emit('overlap', \{\
+          state: overlapState,\
+          distance: dist,\
+          time: Date.now()\
+        \});\
+      \}\
+\
+      // DISABLED: Two-hand zoom\
+      /*\
+      const twoHandZoom = detectTwoHandZoom(handsArray);\
+      if (twoHandZoom) \{\
+        HandInput.emit('zoom', \{\
+          mode: twoHandZoom.mode,\
+          factor: twoHandZoom.factor,\
+          source: twoHandZoom.source,\
+          time: Date.now()\
+        \});\
+      \}\
+      */\
+    \}\
+\
+    // ========================================\
+    // DRAWING / OVERLAY\
+    // ========================================\
+    function drawHands(ctx) \{\
+      // Use display dimensions for drawing\
+      const vw = state.videoDisplayWidth || canvas.width;\
+      const vh = state.videoDisplayHeight || canvas.height;\
+\
+      ctx.clearRect(0, 0, vw, vh);\
+\
+      for (const hand of state.hands.values()) \{\
+        const \{ landmarks, handedness, gesture, gestureConfidence \} = hand;\
+\
+        // Helper to convert normalized MediaPipe coords to video pixel coords\
+        const toPx = (lm) => \{\
+          return \{\
+            x: lm.x * vw,\
+            y: lm.y * vh,\
+            z: lm.z\
+          \};\
+        \};\
+\
+        // Helper to convert coords for text (handles mirroring)\
+        const toPxText = (lm) => \{\
+          const x = lm.x * vw;\
+          const y = lm.y * vh;\
+          // If mirroring, flip x coordinate for text position\
+          return \{\
+            x: CONFIG.mirrorVideo ? vw - x : x,\
+            y: y\
+          \};\
+        \};\
+\
+        // ===== DRAW SKELETON AND JOINTS (WITH MIRRORING) =====\
+        ctx.save();\
+\
+        // Apply mirroring transform for skeleton\
+        if (CONFIG.mirrorVideo) \{\
+          ctx.translate(vw, 0);\
+          ctx.scale(-1, 1);\
+        \}\
+\
+        // Draw skeleton connections\
+        if (CONFIG.draw.skeleton) \{\
+          ctx.lineWidth = 3;\
+          ctx.lineCap = 'round';\
+          ctx.lineJoin = 'round';\
+\
+          HAND_CONNECTIONS.forEach(([start, end]) => \{\
+            const p1 = toPx(landmarks[start]);\
+            const p2 = toPx(landmarks[end]);\
+\
+            // Color based on finger group\
+            let strokeColor = 'rgba(74, 158, 255, 0.8)';\
+\
+            if ((start >= 1 && start <= 4) || (end >= 1 && end <= 4)) \{\
+              strokeColor = 'rgba(255, 107, 107, 0.8)'; // Thumb - red\
+            \} else if ((start >= 5 && start <= 8) || (end >= 5 && end <= 8)) \{\
+              strokeColor = 'rgba(74, 255, 74, 0.8)'; // Index - green\
+            \} else if ((start >= 9 && start <= 12) || (end >= 9 && end <= 12)) \{\
+              strokeColor = 'rgba(74, 158, 255, 0.8)'; // Middle - blue\
+            \} else if ((start >= 13 && start <= 16) || (end >= 13 && end <= 16)) \{\
+              strokeColor = 'rgba(255, 74, 255, 0.8)'; // Ring - magenta\
+            \} else if ((start >= 17 && start <= 20) || (end >= 17 && end <= 20)) \{\
+              strokeColor = 'rgba(255, 170, 74, 0.8)'; // Pinky - orange\
+            \}\
+\
+            ctx.strokeStyle = strokeColor;\
+            ctx.beginPath();\
+            ctx.moveTo(p1.x, p1.y);\
+            ctx.lineTo(p2.x, p2.y);\
+            ctx.stroke();\
+          \});\
+        \}\
+\
+        // Draw landmarks (joints)\
+        if (CONFIG.draw.landmarks) \{\
+          landmarks.forEach((lm, idx) => \{\
+            const pos = toPx(lm);\
+\
+            // Color coding by finger\
+            let color = '#4a9eff';\
+            if (idx === LANDMARKS.WRIST) color = '#ffff00'; // Yellow for wrist\
+            else if (idx >= 1 && idx <= 4) color = '#ff6b6b'; // Red for thumb\
+            else if (idx >= 5 && idx <= 8) color = '#4aff4a'; // Green for index\
+            else if (idx >= 9 && idx <= 12) color = '#4a9eff'; // Blue for middle\
+            else if (idx >= 13 && idx <= 16) color = '#ff4aff'; // Magenta for ring\
+            else if (idx >= 17 && idx <= 20) color = '#ffaa4a'; // Orange for pinky\
+\
+            const radius = idx === LANDMARKS.WRIST ? 8 : 5;\
+\
+            // Shadow for depth\
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';\
+            ctx.beginPath();\
+            ctx.arc(pos.x + 1.5, pos.y + 1.5, radius + 0.5, 0, 2 * Math.PI);\
+            ctx.fill();\
+\
+            // Main joint\
+            ctx.fillStyle = color;\
+            ctx.beginPath();\
+            ctx.arc(pos.x, pos.y, radius, 0, 2 * Math.PI);\
+            ctx.fill();\
+\
+            // White border\
+            ctx.strokeStyle = '#fff';\
+            ctx.lineWidth = 2;\
+            ctx.beginPath();\
+            ctx.arc(pos.x, pos.y, radius, 0, 2 * Math.PI);\
+            ctx.stroke();\
+          \});\
+        \}\
+\
+        ctx.restore(); // End mirrored drawing\
+\
+        // ===== DRAW TEXT (WITHOUT MIRRORING) =====\
+\
+        // Draw index numbers (not mirrored)\
+        if (CONFIG.draw.labels) \{\
+          landmarks.forEach((lm, idx) => \{\
+            const pos = toPxText(lm);\
+\
+            ctx.fillStyle = '#fff';\
+            ctx.font = 'bold 11px monospace';\
+            ctx.strokeStyle = '#000';\
+            ctx.lineWidth = 3;\
+            ctx.textAlign = 'left';\
+            ctx.strokeText(idx, pos.x + 10, pos.y - 8);\
+            ctx.fillText(idx, pos.x + 10, pos.y - 8);\
+          \});\
+        \}\
+\
+        // Draw gesture badge (not mirrored)\
+        if (CONFIG.draw.labels && gestureConfidence >= CONFIG.minConfidence) \{\
+          const wristPos = toPxText(landmarks[LANDMARKS.WRIST]);\
+          const badgeY = wristPos.y + 50;\
+          const badgeX = wristPos.x;\
+\
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';\
+          roundRect(ctx, badgeX - 55, badgeY - 22, 110, 34, 6);\
+          ctx.fill();\
+\
+          ctx.fillStyle = '#fff';\
+          ctx.font = 'bold 16px sans-serif';\
+          ctx.textAlign = 'center';\
+          ctx.fillText(gesture, badgeX, badgeY - 2);\
+\
+          ctx.font = '12px sans-serif';\
+          ctx.fillStyle = '#4aff4a';\
+          ctx.fillText(`$\{(gestureConfidence * 100).toFixed(0)\}%`, badgeX, badgeY + 12);\
+        \}\
+      \}\
+    \}\
+\
+    function updateDebugPanel() \{\
+      const content = document.getElementById('debugContent');\
+      let html = '';\
+\
+      for (const hand of state.hands.values()) \{\
+        html += `<div class="debug-hand">`;\
+        html += `<div class="debug-label">$\{hand.handedness\} Hand</div>`;\
+        html += `<div class="debug-row"><span class="debug-key">Gesture:</span><span class="debug-value gesture-badge">$\{hand.gesture\} ($\{(hand.gestureConfidence * 100).toFixed(0)\}%)</span></div>`;\
+        html += `<div class="debug-row"><span class="debug-key">Palm:</span><span class="debug-value">($\{hand.palm.nx.toFixed(3)\}, $\{hand.palm.ny.toFixed(3)\})</span></div>`;\
+\
+        // Hand metrics\
+        html += `<div class="debug-row"><span class="debug-key">Spread (0-1):</span><span class="debug-value" style="color: $\{hand.handSpread > 0.35 ? '#4aff4a' : '#ff4a4a'\}">$\{hand.handSpread ? hand.handSpread.toFixed(3) : 'N/A'\}</span></div>`;\
+        html += `<div class="debug-row"><span class="debug-key">Curl (0-1):</span><span class="debug-value" style="color: $\{hand.handCurl < 0.35 ? '#4aff4a' : hand.handCurl > 0.65 ? '#ff4a4a' : '#ffaa4a'\}">$\{hand.handCurl ? hand.handCurl.toFixed(3) : 'N/A'\}</span></div>`;\
+\
+        // Finger extensions\
+        if (hand.fingerExtensions) \{\
+          const ext = hand.fingerExtensions;\
+          html += `<div class="debug-row"><span class="debug-key">Fingers:</span><span class="debug-value">`;\
+          html += `T:$\{ext.thumb ? '\uc0\u10003 ' : '\u10007 '\} `;\
+          html += `I:$\{ext.index ? '\uc0\u10003 ' : '\u10007 '\} `;\
+          html += `M:$\{ext.middle ? '\uc0\u10003 ' : '\u10007 '\} `;\
+          html += `R:$\{ext.ring ? '\uc0\u10003 ' : '\u10007 '\} `;\
+          html += `P:$\{ext.pinky ? '\uc0\u10003 ' : '\u10007 '\}`;\
+          html += `</span></div>`;\
+        \}\
+\
+        // Individual finger curls\
+        if (hand.fingerCurls) \{\
+          const c = hand.fingerCurls;\
+          html += `<div class="debug-row"><span class="debug-key">Curls:</span><span class="debug-value" style="font-size: 10px;">`;\
+          html += `I:$\{c.index.toFixed(2)\} `;\
+          html += `M:$\{c.middle.toFixed(2)\} `;\
+          html += `R:$\{c.ring.toFixed(2)\} `;\
+          html += `P:$\{c.pinky.toFixed(2)\}`;\
+          html += `</span></div>`;\
+        \}\
+\
+        html += `<div class="debug-row"><span class="debug-key">Velocity:</span><span class="debug-value">($\{hand.velocity.vx.toFixed(0)\}, $\{hand.velocity.vy.toFixed(0)\}) px/s</span></div>`;\
+        html += `<div class="debug-row"><span class="debug-key">Speed:</span><span class="debug-value">$\{hand.velocity.speed.toFixed(0)\} px/s</span></div>`;\
+        html += `<div class="debug-row"><span class="debug-key">Depth (z):</span><span class="debug-value">$\{hand.z.toFixed(4)\}</span></div>`;\
+        html += `<div class="debug-row"><span class="debug-key">Pinch:</span><span class="debug-value">$\{hand.pinchDist.toFixed(1)\} px</span></div>`;\
+\
+        // Add zoom state info\
+        if (hand.zoomState) \{\
+          const stateColor = hand.zoomState === 'closed' ? '#ff4a4a' : hand.zoomState === 'open' ? '#4aff4a' : '#888';\
+          html += `<div class="debug-row"><span class="debug-key">Zoom State:</span><span class="debug-value" style="color: $\{stateColor\}">$\{hand.zoomState.toUpperCase()\}</span></div>`;\
+        \}\
+\
+        // Add Fist-specific debug info (ALWAYS SHOW)\
+        if (hand.fistExtras) \{\
+          const f = hand.fistExtras;\
+          const fistStatusColor = hand.fistDetected ? '#4aff4a' : '#ff4a4a';\
+          html += `<div class="debug-row"><span class="debug-key">Fist Status:</span><span class="debug-value" style="color: $\{fistStatusColor\}; font-weight: bold;">`;\
+          html += `$\{hand.fistDetected ? 'DETECTED' : 'NOT DETECTED'\} ($\{(hand.fistConfidence * 100).toFixed(0)\}%)`;\
+          html += `</span></div>`;\
+          html += `<div class="debug-row"><span class="debug-key">Fist Check:</span><span class="debug-value" style="font-size: 10px;">`;\
+          html += `Curled:$\{f.curledCount\}/4 `;\
+          html += `Thumb:$\{f.thumbFolded ? '\uc0\u10003 ' : '\u10007 '\} `;\
+          html += `Tight:$\{f.avgTipDist.toFixed(2)\}`;\
+          html += `</span></div>`;\
+          html += `<div class="debug-row"><span class="debug-key">Ext(0-1):</span><span class="debug-value" style="font-size: 10px;">`;\
+          html += `I:$\{f.extIndex.toFixed(2)\} `;\
+          html += `M:$\{f.extMiddle.toFixed(2)\} `;\
+          html += `R:$\{f.extRing.toFixed(2)\} `;\
+          html += `P:$\{f.extPinky.toFixed(2)\}`;\
+          html += `</span></div>`;\
+        \}\
+\
+        // Add extension scores (ALWAYS SHOW if available)\
+        if (hand.extensionScores) \{\
+          const s = hand.extensionScores;\
+          const pointColor = hand.looksLikePoint ? '#4aff4a' : '#888';\
+          html += `<div class="debug-row"><span class="debug-key">ExtScore:</span><span class="debug-value" style="font-size: 10px;">`;\
+          html += `I:$\{s.index.toFixed(2)\} M:$\{s.middle.toFixed(2)\} R:$\{s.ring.toFixed(2)\} P:$\{s.pinky.toFixed(2)\}`;\
+          html += `</span></div>`;\
+          html += `<div class="debug-row"><span class="debug-key">Point Match:</span><span class="debug-value" style="color: $\{pointColor\}; font-weight: bold;">`;\
+          html += `$\{hand.looksLikePoint ? '\uc0\u10003  YES' : '\u10007  NO'\}`;\
+          html += `</span></div>`;\
+        \}\
+\
+        // Add Tap-specific debug info (ALWAYS SHOW)\
+        if (hand._tapInit) \{\
+          const isPointish = hand.gesture === 'Point' || hand.gesture === 'PartialOpen';\
+          const gestureColor = isPointish ? '#4aff4a' : '#ff4a4a';\
+          const inRange = hand.tapMovement >= TAP.minMovement && hand.tapMovement <= TAP.maxMovement;\
+          const movementColor = inRange ? '#4aff4a' : (hand.tapMovement > TAP.maxMovement ? '#ff4a4a' : '#ffaa4a');\
+          const armedColor = hand._tapArmed ? '#4aff4a' : '#888';\
+\
+          html += `<div class="debug-row"><span class="debug-key">Gesture OK:</span><span class="debug-value" style="color: $\{gestureColor\}; font-weight: bold;">`;\
+          html += `$\{isPointish ? '\uc0\u10003  ' + hand.gesture : '\u10007  ' + hand.gesture\}`;\
+          html += `</span></div>`;\
+          html += `<div class="debug-row"><span class="debug-key">Tap Armed:</span><span class="debug-value" style="color: $\{armedColor\}; font-weight: bold;">`;\
+          html += `$\{hand._tapArmed ? '\uc0\u55356 \u57263  YES' : '\u9203  NO'\}`;\
+          html += `</span></div>`;\
+          html += `<div class="debug-row"><span class="debug-key">Movement:</span><span class="debug-value" style="color: $\{movementColor\}; font-weight: bold;">`;\
+          html += `$\{hand.tapMovement.toFixed(4)\}`;\
+          html += `</span></div>`;\
+          html += `<div class="debug-row"><span class="debug-key">Tap Range:</span><span class="debug-value" style="font-size: 11px;">`;\
+          html += `$\{TAP.minMovement.toFixed(3)\} - $\{TAP.maxMovement.toFixed(3)\}`;\
+          html += `</span></div>`;\
+        \}\
+\
+        html += `</div>`;\
+      \}\
+\
+      if (state.hands.size === 0) \{\
+        html = '<div style="color: #888; margin-top: 10px;">No hands detected</div>';\
+      \}\
+\
+      content.innerHTML = html;\
+    \}\
+\
+\
+    // ========================================\
+    // DEMO / VISUAL EFFECTS\
+    // ========================================\
+    const demoState = \{\
+      orb: \{ x: window.innerWidth / 2, y: window.innerHeight / 2 \},\
+      pinchRings: []\
+    \};\
+\
+    function updateDemo() \{\
+      const overlay = document.getElementById('demoOverlay');\
+      let html = '';\
+\
+      // DISABLED: Orb removed temporarily\
+\
+      // Pinch rings (kept for pinch gesture visual feedback)\
+      demoState.pinchRings = demoState.pinchRings.filter(ring => Date.now() - ring.time < 1000);\
+      demoState.pinchRings.forEach(ring => \{\
+        const age = Date.now() - ring.time;\
+        const opacity = 1 - age / 1000;\
+        const scale = 1 + age / 500;\
+        html += `<div style="position: fixed; left: $\{ring.x\}px; top: $\{ring.y\}px; width: $\{40 * scale\}px; height: $\{40 * scale\}px; border: 3px solid rgba(255,74,158,$\{opacity\}); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none;"></div>`;\
+      \});\
+\
+      overlay.innerHTML = html;\
+    \}\
+\
+    // Event listeners for demo with enhanced visual feedback\
+    HandInput.on('swipe', (data) => \{\
+      const flash = document.createElement('div');\
+      flash.className = `swipe-flash $\{data.direction\}`;\
+\
+      // Add arrow indicator\
+      const arrows = \{\
+        'left': '\uc0\u8592  SWIPE LEFT',\
+        'right': 'SWIPE RIGHT \uc0\u8594 ',\
+        'up': '\uc0\u8593  SWIPE UP',\
+        'down': '\uc0\u8595  SWIPE DOWN'\
+      \};\
+      flash.textContent = arrows[data.direction] || '';\
+\
+      document.body.appendChild(flash);\
+      setTimeout(() => flash.remove(), 500);\
+\
+      console.log(`[SWIPE $\{data.direction.toUpperCase()\}] Speed: $\{data.speed.toFixed(0)\} px/s`);\
+    \});\
+\
+    // Tap orb animation setup - \uc0\u9989  FIXED to use canvas rect\
+    const tapOrb = document.getElementById('tapOrb');\
+    let hideTimeout;\
+\
+    HandInput.on('tap', (data) => \{\
+      const isDouble = data.count === 2;\
+      const \{ nx, ny \} = data;\
+\
+      // Map normalized coords (0\'961) to the canvas' actual on-screen box\
+      const rect = canvas.getBoundingClientRect();\
+      const x = rect.left + nx * rect.width;\
+      const y = rect.top  + ny * rect.height;\
+\
+      // Move the orb to tap position\
+      tapOrb.style.left = `$\{x\}px`;\
+      tapOrb.style.top  = `$\{y\}px`;\
+\
+      // Animate\
+      tapOrb.classList.remove('active');\
+      void tapOrb.offsetWidth; // reset transition\
+      tapOrb.classList.add('active');\
+\
+      clearTimeout(hideTimeout);\
+      hideTimeout = setTimeout(() => tapOrb.classList.remove('active'), 500);\
+\
+      console.log(`[TAP $\{isDouble ? 'DOUBLE' : 'SINGLE'\}] at ($\{nx.toFixed(2)\}, $\{ny.toFixed(2)\})`);\
+    \});\
+\
+    HandInput.on('pinch', (data) => \{\
+      // Skip visual feedback if disabled (gesture label still works)\
+      if (!ENABLE_PINCH_VISUALS) return;\
+\
+      if (data.state === 'start') \{\
+        // Map normalized coords to canvas' actual on-screen box\
+        const rect = canvas.getBoundingClientRect();\
+        demoState.pinchRings.push(\{\
+          x: rect.left + data.nx * rect.width,\
+          y: rect.top  + data.ny * rect.height,\
+          time: Date.now()\
+        \});\
+        console.log(`[PINCH $\{data.state.toUpperCase()\}] Distance: $\{data.distance.toFixed(1)\}px`);\
+      \}\
+    \});\
+\
+    // DISABLED: Zoom event handler\
+    /*\
+    HandInput.on('zoom', (data) => \{\
+      state.zoomFactor *= data.factor;\
+      state.zoomFactor = Math.max(0.5, Math.min(3.0, state.zoomFactor));\
+      document.getElementById('zoomValue').textContent = `$\{state.zoomFactor.toFixed(2)\}\'d7`;\
+\
+      // Visual feedback\
+      const zoomIndicator = document.createElement('div');\
+      zoomIndicator.className = 'zoom-indicator-temp';\
+      zoomIndicator.textContent = data.mode === 'in' ? '\uc0\u55357 \u56589 +' : '\u55357 \u56589 \u8722 ';\
+      document.body.appendChild(zoomIndicator);\
+      setTimeout(() => zoomIndicator.remove(), 600);\
+\
+      console.log(`[ZOOM $\{data.mode.toUpperCase()\}] Factor: $\{data.factor.toFixed(3)\} Source: $\{data.source\}`);\
+    \});\
+    */\
+\
+    // ========================================\
+    // MOUSE/TOUCH FALLBACK\
+    // ========================================\
+    function setupFallback() \{\
+      let lastMouseMove = 0;\
+      let mouseDown = false;\
+      let lastClickTime = 0;\
+\
+      document.addEventListener('mousemove', (e) => \{\
+        if (!state.useFallback) return;\
+\
+        const nx = e.clientX / window.innerWidth;\
+        const ny = e.clientY / window.innerHeight;\
+        const now = Date.now();\
+        const dt = now - lastMouseMove;\
+\
+        const velocity = computeVelocity(\
+          state.mousePos,\
+          \{ x: e.clientX, y: e.clientY \},\
+          dt\
+        );\
+\
+        state.mousePos = \{ x: nx, y: ny \};\
+        lastMouseMove = now;\
+\
+        HandInput.emit('handmove', \{\
+          nx, ny,\
+          vx: velocity.vx,\
+          vy: velocity.vy,\
+          speed: velocity.speed,\
+          z: 0,\
+          handedness: 'Mouse',\
+          time: now\
+        \});\
+\
+        // Detect drag swipe\
+        if (mouseDown && velocity.speed > CONFIG.swipeSpeedPxPerSec) \{\
+          const angle = angleDeg(velocity.vx, velocity.vy);\
+          const tolerance = CONFIG.swipeAngleToleranceDeg;\
+\
+          let direction = null;\
+          if (Math.abs(angle) < tolerance) direction = 'right';\
+          else if (Math.abs(angle - 180) < tolerance || Math.abs(angle + 180) < tolerance) direction = 'left';\
+          else if (Math.abs(angle - 90) < tolerance) direction = 'down';\
+          else if (Math.abs(angle + 90) < tolerance) direction = 'up';\
+\
+          if (direction) \{\
+            HandInput.emit('swipe', \{\
+              direction,\
+              speed: velocity.speed,\
+              handedness: 'Mouse',\
+              time: now\
+            \});\
+          \}\
+        \}\
+      \});\
+\
+      document.addEventListener('mousedown', () => \{\
+        mouseDown = true;\
+      \});\
+\
+      document.addEventListener('mouseup', () => \{\
+        mouseDown = false;\
+      \});\
+\
+      document.addEventListener('click', (e) => \{\
+        if (!state.useFallback) return;\
+\
+        const now = Date.now();\
+        const gap = now - lastClickTime;\
+\
+        const count = (gap < CONFIG.doubleTapMaxMs && gap > CONFIG.doubleTapMinMs) ? 2 : 1;\
+\
+        HandInput.emit('tap', \{\
+          count,\
+          nx: e.clientX / window.innerWidth,\
+          ny: e.clientY / window.innerHeight,\
+          handedness: 'Mouse',\
+          time: now\
+        \});\
+\
+        lastClickTime = now;\
+      \});\
+\
+      document.addEventListener('wheel', (e) => \{\
+        if (!state.useFallback) return;\
+\
+        HandInput.emit('zoom', \{\
+          mode: e.deltaY < 0 ? 'in' : 'out',\
+          factor: e.deltaY < 0 ? 1.1 : 0.9,\
+          source: 'mouse',\
+          time: Date.now()\
+        \});\
+      \});\
+    \}\
+\
+    // ========================================\
+    // CAMERA & MEDIAPIPE SETUP\
+    // ========================================\
+    const video = document.getElementById('video');\
+    const canvas = document.getElementById('canvas');\
+    const ctx = canvas.getContext('2d');\
+\
+    async function setupCamera() \{\
+      try \{\
+        const stream = await navigator.mediaDevices.getUserMedia(\{\
+          video: \{ facingMode: 'user', width: 1280, height: 720 \}\
+        \});\
+\
+        video.srcObject = stream;\
+        await video.play();\
+\
+        // Wait for video metadata to load\
+        await new Promise(resolve => \{\
+          if (video.readyState >= 2) \{\
+            resolve();\
+          \} else \{\
+            video.addEventListener('loadedmetadata', resolve, \{ once: true \});\
+          \}\
+        \});\
+\
+        // Get video native dimensions\
+        const videoNativeWidth = video.videoWidth;\
+        const videoNativeHeight = video.videoHeight;\
+\
+        // Calculate actual displayed video size (it fills viewport maintaining aspect ratio)\
+        const viewportWidth = window.innerWidth;\
+        const viewportHeight = window.innerHeight;\
+        const videoAspect = videoNativeWidth / videoNativeHeight;\
+        const viewportAspect = viewportWidth / viewportHeight;\
+\
+        let displayWidth, displayHeight;\
+        if (videoAspect > viewportAspect) \{\
+          // Video is wider - height fills viewport\
+          displayHeight = viewportHeight;\
+          displayWidth = displayHeight * videoAspect;\
+        \} else \{\
+          // Video is taller - width fills viewport\
+          displayWidth = viewportWidth;\
+          displayHeight = displayWidth / videoAspect;\
+        \}\
+\
+        const dpr = window.devicePixelRatio || 1;\
+\
+        // Store dimensions for coordinate mapping\
+        state.videoNativeWidth = videoNativeWidth;\
+        state.videoNativeHeight = videoNativeHeight;\
+        state.videoDisplayWidth = displayWidth;\
+        state.videoDisplayHeight = displayHeight;\
+        state.dpr = dpr;\
+\
+        // Canvas matches the displayed video size\
+        canvas.width = Math.round(displayWidth * dpr);\
+        canvas.height = Math.round(displayHeight * dpr);\
+        canvas.style.width = displayWidth + 'px';\
+        canvas.style.height = displayHeight + 'px';\
+\
+        // Set transform for DPR scaling\
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);\
+\
+        state.cameraActive = true;\
+        state.useFallback = false;\
+\
+        console.log(`Video native: $\{videoNativeWidth\}\'d7$\{videoNativeHeight\}`);\
+        console.log(`Video display: $\{displayWidth.toFixed(0)\}\'d7$\{displayHeight.toFixed(0)\}`);\
+        console.log(`Canvas: $\{displayWidth\}\'d7$\{displayHeight\} (CSS), $\{canvas.width\}\'d7$\{canvas.height\} (internal), DPR=$\{dpr\}`);\
+\
+        return true;\
+      \} catch (err) \{\
+        console.error('Camera access denied:', err);\
+        state.useFallback = true;\
+\
+        // Set default canvas size\
+        const dpr = window.devicePixelRatio || 1;\
+        canvas.width = Math.round(window.innerWidth * dpr);\
+        canvas.height = Math.round(window.innerHeight * dpr);\
+        canvas.style.width = window.innerWidth + 'px';\
+        canvas.style.height = window.innerHeight + 'px';\
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);\
+\
+        state.videoDisplayWidth = window.innerWidth;\
+        state.videoDisplayHeight = window.innerHeight;\
+        state.dpr = dpr;\
+\
+        alert('Camera access denied. Using mouse fallback mode.');\
+        return false;\
+      \}\
+    \}\
+\
+    async function setupMediaPipe() \{\
+      const hands = new Hands(\{\
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/$\{file\}`\
+      \});\
+\
+      hands.setOptions(\{\
+        maxNumHands: CONFIG.maxHands,\
+        modelComplexity: 1,\
+        minDetectionConfidence: 0.7,\
+        minTrackingConfidence: 0.7\
+      \});\
+\
+      hands.onResults((results) => \{\
+        const now = Date.now();\
+        const dt = state.lastFrameTime ? now - state.lastFrameTime : 16;\
+        state.lastFrameTime = now;\
+\
+        updateHands(results, dt);\
+        drawHands(ctx);\
+        updateDebugPanel();\
+        updateDemo();\
+      \});\
+\
+      return hands;\
+    \}\
+\
+    async function startTracking() \{\
+      const cameraOk = await setupCamera();\
+\
+      if (cameraOk) \{\
+        const hands = await setupMediaPipe();\
+\
+        const camera = new Camera(video, \{\
+          onFrame: async () => \{\
+            await hands.send(\{ image: video \});\
+          \},\
+          width: 1280,\
+          height: 720\
+        \});\
+\
+        camera.start();\
+      \}\
+\
+      document.getElementById('loading').remove();\
+    \}\
+\
+    // ========================================\
+    // RESIZE HANDLING\
+    // ========================================\
+    window.addEventListener('resize', () => \{\
+      if (!state.cameraActive) \{\
+        const dpr = window.devicePixelRatio || 1;\
+        const w = window.innerWidth;\
+        const h = window.innerHeight;\
+\
+        canvas.width = Math.round(w * dpr);\
+        canvas.height = Math.round(h * dpr);\
+        canvas.style.width = w + 'px';\
+        canvas.style.height = h + 'px';\
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);\
+\
+        state.videoDisplayWidth = w;\
+        state.videoDisplayHeight = h;\
+        state.dpr = dpr;\
+      \} else if (state.videoNativeWidth && state.videoNativeHeight) \{\
+        // Recalculate display size if camera is active\
+        const viewportWidth = window.innerWidth;\
+        const viewportHeight = window.innerHeight;\
+        const videoAspect = state.videoNativeWidth / state.videoNativeHeight;\
+        const viewportAspect = viewportWidth / viewportHeight;\
+\
+        let displayWidth, displayHeight;\
+        if (videoAspect > viewportAspect) \{\
+          displayHeight = viewportHeight;\
+          displayWidth = displayHeight * videoAspect;\
+        \} else \{\
+          displayWidth = viewportWidth;\
+          displayHeight = displayWidth / videoAspect;\
+        \}\
+\
+        const dpr = window.devicePixelRatio || 1;\
+\
+        state.videoDisplayWidth = displayWidth;\
+        state.videoDisplayHeight = displayHeight;\
+        state.dpr = dpr;\
+\
+        canvas.width = Math.round(displayWidth * dpr);\
+        canvas.height = Math.round(displayHeight * dpr);\
+        canvas.style.width = displayWidth + 'px';\
+        canvas.style.height = displayHeight + 'px';\
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);\
+      \}\
+    \});\
+\
+    // ========================================\
+    // MOUSE FALLBACK FOR TESTING\
+    // ========================================\
+    // Only fire when in fallback mode to avoid confusing debug with camera active\
+    if (state.useFallback) \{\
+      window.addEventListener('click', (e) => \{\
+        const rect = canvas.getBoundingClientRect();\
+        const nx = (e.clientX - rect.left) / rect.width;\
+        const ny = (e.clientY - rect.top)  / rect.height;\
+        HandInput.emit('tap', \{ nx, ny, count: 1 \});\
+      \});\
+    \}\
+\
+    // ========================================\
+    // INITIALIZATION\
+    // ========================================\
+    setupFallback();\
+    startTracking();\
+  </script>\
+</body>\
+</html>}
