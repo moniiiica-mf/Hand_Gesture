@@ -122,6 +122,71 @@
       40% {opacity:1;transform:translate(-50%,-50%) scale(1.1);}
       100%{opacity:0;transform:translate(-50%,-50%) scale(1);}
     }
+
+    /* Mode toggle button */
+    #modeToggle {
+      position: fixed; top: 16px; right: 16px;
+      background: rgba(0,0,0,0.82);
+      border: 2px solid rgba(255,255,255,0.25);
+      border-radius: 10px; padding: 8px 18px;
+      color: #fff; font-size: 13px; font-weight: 600;
+      cursor: pointer; z-index: 200;
+      backdrop-filter: blur(10px);
+      transition: border-color 0.2s;
+    }
+    #modeToggle:hover { border-color: #4a9eff; }
+    #modeToggle.word-mode { border-color: #ffaa4a; color: #ffaa4a; }
+
+    /* Word-sign badge */
+    #wordBadge {
+      position: fixed;
+      top: 16px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.82);
+      border: 2px solid rgba(255,170,74,0.6);
+      border-radius: 12px;
+      padding: 10px 32px;
+      z-index: 100;
+      text-align: center;
+      backdrop-filter: blur(10px);
+      min-width: 200px;
+      display: none;
+    }
+    #wordLabel {
+      font-size: 48px; font-weight: 900; line-height: 1;
+      color: #fff; letter-spacing: 1px;
+    }
+    #wordConf {
+      font-size: 13px; color: #ffaa4a; margin-top: 2px;
+    }
+    #wordStatus {
+      font-size: 11px; color: #aaa; margin-top: 2px;
+    }
+
+    /* Phrase display bar */
+    #phraseBar {
+      position: fixed; bottom: 60px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.82);
+      border-radius: 10px; padding: 10px 24px;
+      font-size: 20px; font-weight: 600;
+      letter-spacing: 2px; z-index: 100;
+      min-width: 320px; text-align: center;
+      border: 1px solid rgba(255,170,74,0.3);
+      backdrop-filter: blur(8px);
+      color: #ffaa4a;
+      display: none;
+    }
+
+    /* Model status indicator */
+    #modelStatus {
+      position: fixed; bottom: 16px; right: 16px;
+      font-size: 11px; color: #888; z-index: 100;
+      background: rgba(0,0,0,0.6);
+      border-radius: 6px; padding: 4px 10px;
+      backdrop-filter: blur(6px);
+    }
+    #modelStatus.loaded { color: #4aff4a; }
+    #modelStatus.error  { color: #ff4a4a; }
   </style>
 </head>
 <body>
@@ -146,6 +211,17 @@
   <span id="historyText" style="color:#4a9eff">_ _ _</span>
 </div>
 
+<!-- Word-sign mode UI (hidden until mode toggled) -->
+<div id="wordBadge">
+  <div id="wordLabel">—</div>
+  <div id="wordConf">Collecting frames…</div>
+  <div id="wordStatus"></div>
+</div>
+<div id="phraseBar">…</div>
+<div id="modelStatus">Word model: not loaded</div>
+
+<button id="modeToggle" onclick="toggleMode()">Switch to Word Mode</button>
+
 <div id="loading">
   <div class="spinner"></div>
   <div>Loading ASL model...</div>
@@ -155,6 +231,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<!-- TensorFlow.js — used for word-sign GRU inference -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js" crossorigin="anonymous"></script>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -468,6 +546,135 @@ const FINGER_COLORS = [
 ];
 
 // ═══════════════════════════════════════════════════════
+// WORD-SIGN MODE  (Steps F + G)
+// ═══════════════════════════════════════════════════════
+
+const WORD_CLASSES   = ['hello', 'how', 'how_are_you', 'you', 'today'];
+const WORD_SEQ_LEN   = 30;      // must match extract_sequences.py --seq-len
+const WORD_FEAT_DIM  = 63;      // 21 landmarks × 3 (x,y,z), wrist-centred + palm-scaled
+const WORD_CONF_THR  = 0.60;    // minimum softmax confidence to accept a prediction
+const WORD_COOLDOWN  = 2000;    // ms to ignore new predictions after a confirmed word
+const PALM_A = 5, PALM_B = 17;  // landmark indices for palm-width normalisation
+
+// State
+let wordMode     = false;
+let wordModel    = null;        // tf.LayersModel once loaded
+let wordBuffer   = [];          // rolling window: Array of Float32Array(WORD_FEAT_DIM)
+let phraseTokens = [];          // confirmed word tokens
+let wordCooldownUntil = 0;
+
+// ── Feature extraction (mirrors extract_sequences.py) ─────────────────────
+function extractWordFeatures(lm) {
+  const wrist = [lm[0].x, lm[0].y, lm[0].z];
+  const pa    = [lm[PALM_A].x, lm[PALM_A].y, lm[PALM_A].z];
+  const pb    = [lm[PALM_B].x, lm[PALM_B].y, lm[PALM_B].z];
+  const palmW = Math.hypot(pa[0]-pb[0], pa[1]-pb[1], pa[2]-pb[2]);
+
+  const feat = new Float32Array(WORD_FEAT_DIM);
+  if (palmW < 1e-4) return feat;  // degenerate hand → zero vector
+
+  for (let i = 0; i < 21; i++) {
+    feat[i*3]   = (lm[i].x - wrist[0]) / palmW;
+    feat[i*3+1] = (lm[i].y - wrist[1]) / palmW;
+    feat[i*3+2] = (lm[i].z - wrist[2]) / palmW;
+  }
+  return feat;
+}
+
+// ── Resample buffer to fixed SEQ_LEN ─────────────────────────────────────
+function resampleBuffer(buf) {
+  const T = buf.length;
+  const out = new Float32Array(WORD_SEQ_LEN * WORD_FEAT_DIM);
+  if (T === 0) return out;
+
+  for (let i = 0; i < WORD_SEQ_LEN; i++) {
+    const srcIdx = T >= WORD_SEQ_LEN
+      ? Math.round(i * (T - 1) / (WORD_SEQ_LEN - 1))
+      : i;                                               // end-pad with zeros
+    if (srcIdx < T) {
+      out.set(buf[srcIdx], i * WORD_FEAT_DIM);
+    }
+  }
+  return out;
+}
+
+// ── GRU inference via TF.js ───────────────────────────────────────────────
+async function inferWord() {
+  if (!wordModel) return null;
+  if (wordBuffer.length < 5) return null;               // too few frames yet
+
+  const flat = resampleBuffer(wordBuffer);
+  const input = tf.tensor3d(flat, [1, WORD_SEQ_LEN, WORD_FEAT_DIM]);
+  const logits = wordModel.predict(input);
+  const probs  = await tf.softmax(logits).data();
+  input.dispose(); logits.dispose();
+
+  let best = 0;
+  for (let i = 1; i < probs.length; i++) if (probs[i] > probs[best]) best = i;
+  return { label: WORD_CLASSES[best], confidence: probs[best], probs: Array.from(probs) };
+}
+
+// ── Phrase assembler ──────────────────────────────────────────────────────
+function addWordToPhrase(word) {
+  const last = phraseTokens[phraseTokens.length - 1];
+  if (last === word) return;           // debounce duplicate consecutive words
+  phraseTokens.push(word);
+  if (phraseTokens.length > 8) phraseTokens.shift();
+  updatePhraseBar();
+}
+
+function updatePhraseBar() {
+  const bar = document.getElementById('phraseBar');
+  bar.textContent = phraseTokens.length ? phraseTokens.join(' ') : '…';
+}
+
+// ── Load TF.js model ──────────────────────────────────────────────────────
+async function loadWordModel() {
+  const statusEl = document.getElementById('modelStatus');
+  try {
+    wordModel = await tf.loadLayersModel('model/word_gru/model.json');
+    statusEl.textContent = 'Word model: loaded ✓';
+    statusEl.className   = 'loaded';
+    log.info && log.info('Word GRU model loaded');
+  } catch (e) {
+    statusEl.textContent = 'Word model: not found (train first)';
+    statusEl.className   = 'error';
+    // Not fatal — word mode works as soon as model is placed in model/word_gru/
+  }
+}
+
+// ── Mode toggle ───────────────────────────────────────────────────────────
+function toggleMode() {
+  wordMode = !wordMode;
+  const btn      = document.getElementById('modeToggle');
+  const aslBadge = document.getElementById('aslBadge');
+  const wordBadge= document.getElementById('wordBadge');
+  const histBar  = document.getElementById('historyBar');
+  const phraseBar= document.getElementById('phraseBar');
+
+  if (wordMode) {
+    btn.textContent = 'Switch to Letter Mode';
+    btn.classList.add('word-mode');
+    aslBadge.style.display  = 'none';
+    histBar.style.display   = 'none';
+    wordBadge.style.display = 'block';
+    phraseBar.style.display = 'block';
+    wordBuffer = [];
+    phraseTokens = [];
+    updatePhraseBar();
+    if (!wordModel) loadWordModel();
+  } else {
+    btn.textContent = 'Switch to Word Mode';
+    btn.classList.remove('word-mode');
+    aslBadge.style.display  = 'block';
+    histBar.style.display   = 'block';
+    wordBadge.style.display = 'none';
+    phraseBar.style.display = 'none';
+    wordBuffer = [];
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 // MAIN PROCESSING — called every MediaPipe frame
 // ═══════════════════════════════════════════════════════
 const state = {
@@ -483,13 +690,21 @@ function onHandResults(results) {
   ctx.clearRect(0, 0, W, H);
 
   if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-    // No hands
-    document.getElementById('aslLetter').textContent = '—';
-    document.getElementById('aslConf').textContent = 'No hand detected';
-    document.getElementById('aslConf').style.color = '#888';
-    document.getElementById('aslStable').textContent = '';
-    document.getElementById('debugContent').innerHTML =
-      '<div style="color:#666">No hand detected</div>';
+    if (wordMode) {
+      // Push zero vector so sequence isn't artificially short during occlusion
+      wordBuffer.push(new Float32Array(WORD_FEAT_DIM));
+      if (wordBuffer.length > WORD_SEQ_LEN * 3) wordBuffer.shift();
+      document.getElementById('wordLabel').textContent = '—';
+      document.getElementById('wordConf').textContent  = 'No hand detected';
+      document.getElementById('wordStatus').textContent = '';
+    } else {
+      document.getElementById('aslLetter').textContent = '—';
+      document.getElementById('aslConf').textContent = 'No hand detected';
+      document.getElementById('aslConf').style.color = '#888';
+      document.getElementById('aslStable').textContent = '';
+      document.getElementById('debugContent').innerHTML =
+        '<div style="color:#666">No hand detected</div>';
+    }
     // Clear motion trails
     indexTrailX=[]; indexTrailY=[]; pinkyTrailX=[];
     return;
@@ -522,6 +737,45 @@ function onHandResults(results) {
     ctx.beginPath(); ctx.arc(p.x*W, p.y*H, r, 0, 2*Math.PI); ctx.stroke();
   });
   ctx.restore();
+
+  // ── WORD-SIGN MODE branch ─────────────────────────
+  if (wordMode) {
+    const wfeat = extractWordFeatures(lm);
+    wordBuffer.push(wfeat);
+    if (wordBuffer.length > WORD_SEQ_LEN * 3) wordBuffer.shift();  // cap buffer
+
+    const wordEl   = document.getElementById('wordLabel');
+    const wconfEl  = document.getElementById('wordConf');
+    const wstatEl  = document.getElementById('wordStatus');
+
+    if (!wordModel) {
+      wordEl.textContent  = '—';
+      wconfEl.textContent = 'Model not loaded';
+      wstatEl.textContent = 'Place model in model/word_gru/model.json';
+    } else {
+      const framePct = Math.min(100, Math.round(wordBuffer.length / WORD_SEQ_LEN * 100));
+      wstatEl.textContent = framePct < 100
+        ? `Collecting… ${framePct}%`
+        : `Window full (${wordBuffer.length} frames)`;
+
+      if (Date.now() > wordCooldownUntil) {
+        inferWord().then(res => {
+          if (!res) return;
+          const pct = Math.round(res.confidence * 100);
+          wordEl.textContent  = res.label.replace('_', ' ');
+          wconfEl.textContent = `Confidence: ${pct}%`;
+          wconfEl.style.color = pct >= 70 ? '#4aff4a' : pct >= 50 ? '#ffaa4a' : '#ff4a4a';
+
+          if (res.confidence >= WORD_CONF_THR) {
+            addWordToPhrase(res.label);
+            wordCooldownUntil = Date.now() + WORD_COOLDOWN;
+            wordBuffer = [];  // reset window after confirmed sign
+          }
+        });
+      }
+    }
+    return;   // skip letter-mode pipeline below
+  }
 
   // ── Feature extraction ────────────────────────────
   const features = extractASLFeatures(lm);
