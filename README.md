@@ -34,6 +34,87 @@ python -m http.server 8080
 
 ---
 
+## Letter mode — validation & tuning playbook
+
+### How to run
+
+```bash
+python -m http.server 8080
+# Open http://localhost:8080 in Chrome/Edge
+# Allow camera access when prompted
+# The letter badge appears top-left; no training required
+```
+
+### Before / after this update
+
+| Behaviour | Before | After |
+|---|---|---|
+| How a letter is committed | After N consecutive matching frames | After 750 ms of stable majority vote |
+| Rapid-fire duplicates | Common when holding a pose | Blocked by 700 ms cooldown gate |
+| Ambiguous pose (top-2 too close) | Committed anyway | Held until margin ≥ 15 % |
+| H vs U/V confusion | Frequent mis-fires | Geometry check: H only commits when fingers point sideways |
+| Voice feedback | Silent | Web Speech API reads each committed letter aloud (toggle with 🔊 Voice) |
+| Stability progress | None | Blue fill bar shows hold progress toward commit threshold |
+
+### Tuning thresholds (edit the `CFG` object in `index.html`)
+
+```javascript
+const CFG = {
+  BUFFER_SIZE:        20,    // frames kept in rolling vote window
+  STABLE_MS:         750,    // ms the top candidate must dominate before commit
+  MIN_CONFIDENCE:   0.50,    // RF confidence gate (0–1); raise to 0.65 to reduce noise
+  COOLDOWN_MS:       700,    // ms blocked after each commit; prevents rapid duplicates
+  TOP2_MARGIN:      0.15,    // min gap between top-2 votes (fraction of total trees)
+  NO_HAND_RESET_MS:  400,    // ms without a detected hand before buffer resets
+  TTS_ENABLED_DEFAULT: true, // start with voice on/off
+};
+```
+
+**Guidelines:**
+- Noisy environment or shaky hand → increase `STABLE_MS` to 1000–1200 ms.
+- Predictions commit too slowly → lower `STABLE_MS` to 500 ms.
+- Too many false commits → raise `MIN_CONFIDENCE` to 0.60 and `TOP2_MARGIN` to 0.20.
+- Duplicates slip through → raise `COOLDOWN_MS` to 900 ms.
+- H still misfiring → open the debug panel (`?` key) and check **idxDX** vs **idxDY**;
+  H only passes if `|idxDX| > |idxDY|`. If your hand geometry is unusual, the
+  threshold inside `onHandResults` can be tightened from `0.55` to a higher ratio.
+
+### Manual QA checklist
+
+Run through these checks after any threshold change:
+
+- [ ] **Single commit per hold** — Hold A steady for 1 s → exactly one "A" appears in
+      the history bar; no rapid repeats.
+- [ ] **Cooldown gate** — Sign A, immediately re-sign A without lifting your hand →
+      second commit is blocked until the blue bar refills.
+- [ ] **No-hand reset** — Drop your hand fully for 0.5 s, then sign B → B commits
+      cleanly (cooldown waived after reset).
+- [ ] **H vs U/V** — Point two fingers **upward** → should predict U or V, not H.
+      Point two fingers **sideways** → should predict H.
+- [ ] **Low-confidence hold** — Cup your hand ambiguously; the bar should stall at
+      partial fill and show a calibration hint ("Move hand to centre" etc.).
+- [ ] **Voice on/off** — Click 🔊 Voice; committed letters should be spoken aloud.
+      Click again; voice should stop immediately (`speechSynthesis.cancel()`).
+- [ ] **Debug panel** — Press `?`; verify Stability row shows `heldMs / 750 ms`
+      and Top-2 gap turns red when the margin is below threshold.
+
+### Testing H vs nearby confusions
+
+H is the most commonly confused letter in this dataset. Use the debug panel:
+
+1. Press `?` to open the overlay.
+2. Sign H (index + middle extended, pointing **right**):
+   - **idxDX** (feat[18]) should be the dominant non-zero value.
+   - **idxDY** (feat[17]) should be smaller in magnitude than **idxDX**.
+   - RF label should show `H`; ⚠H indicator should **not** appear.
+3. Sign U (index + middle extended, pointing **up**):
+   - **idxDY** should dominate.
+   - ⚠H indicator appears → model overrides to U or V based on vote count.
+4. If the override misfires, check that the vote ratio `uV/hV` or `vV/hV`
+   exceeds 0.55. Adjust the constant in `onHandResults` near `hV*0.55`.
+
+---
+
 ## Quick smoke test — verify the full pipeline structure
 
 This downloads 2 real clips per class, runs extraction, trains for 3 epochs,

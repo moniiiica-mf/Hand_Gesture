@@ -63,6 +63,50 @@
       margin-top: 2px;
     }
 
+    /* Stability progress bar */
+    #stabilityWrap {
+      width: 100%; height: 4px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 2px; overflow: hidden;
+      margin-top: 6px;
+    }
+    #stabilityFill {
+      height: 100%; width: 0%;
+      border-radius: 2px;
+      background: #4a9eff;
+      transition: width 0.08s linear, background 0.25s;
+    }
+    /* Last committed letter */
+    #lastCommit {
+      font-size: 11px; color: #666;
+      margin-top: 4px; min-height: 14px;
+    }
+    /* TTS toggle */
+    #ttsToggle {
+      position: fixed; bottom: 68px; right: 16px;
+      background: rgba(0,0,0,0.82);
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 10px; padding: 7px 14px;
+      color: #888; font-size: 13px; font-weight: 600;
+      cursor: pointer; z-index: 200;
+      backdrop-filter: blur(10px);
+      transition: border-color 0.2s, color 0.2s;
+      user-select: none;
+    }
+    #ttsToggle.on { border-color: #4aff4a; color: #4aff4a; }
+    /* Calibration hint */
+    #calibHint {
+      position: fixed; bottom: 120px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,170,0,0.92);
+      color: #000; font-size: 13px; font-weight: 600;
+      padding: 6px 18px; border-radius: 20px;
+      z-index: 200; pointer-events: none;
+      opacity: 0; transition: opacity 0.25s;
+      white-space: nowrap;
+    }
+    #calibHint.show { opacity: 1; }
+
     /* Debug panel */
     #debugPanel {
       position: fixed; top: 10px; left: 10px;
@@ -200,7 +244,12 @@
   <div id="aslLetter">—</div>
   <div id="aslConf">Waiting for hand...</div>
   <div id="aslStable"></div>
+  <div id="stabilityWrap"><div id="stabilityFill"></div></div>
+  <div id="lastCommit"></div>
 </div>
+
+<div id="calibHint"></div>
+<button id="ttsToggle" onclick="toggleTTS()">🔊 Voice</button>
 
 <div id="debugPanel">
   <div style="color:#4a9eff;font-weight:bold;margin-bottom:6px;">ASL Debug</div>
@@ -415,46 +464,72 @@ function digitRules(lm) {
 // Majority-vote over a rolling window of N frames.
 // Also tracks velocity for J/Z motion detection.
 // ═══════════════════════════════════════════════════════
-const SMOOTH_WINDOW = 14;     // frames for majority vote
-const CONF_THRESHOLD = 0.45;  // minimum RF confidence to use prediction
-const STABLE_FRAMES = 5;      // frames same letter must hold to confirm
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+// Edit these constants to tune responsiveness vs. accuracy.
+const CFG = {
+  BUFFER_SIZE:          20,   // rolling prediction buffer (frames)
+  STABLE_MS:           750,   // ms the same class must dominate before commit
+  MIN_CONFIDENCE:     0.50,   // per-frame RF confidence floor
+  COOLDOWN_MS:         700,   // ms to block re-commit after each commit
+  TOP2_MARGIN:        0.15,   // min gap between top-1 and top-2 vote fractions
+  NO_HAND_RESET_MS:    400,   // ms of absent hand before stability resets
+  TTS_ENABLED_DEFAULT: true,
+};
 
-const predHistory = [];       // last N raw predictions
-let stableCandidate = null;
-let stableCandidateCount = 0;
-let confirmedLetter = null;
-let confirmedConf = 0;
+// ── Smoothing / commit state ───────────────────────────────────────────────
+const predBuf       = [];     // rolling { label, conf } entries
+let stableCandidate  = null;
+let stableStartTime  = 0;
+let lastCommitTime   = 0;
+let lastHandTime     = 0;
+let confirmedLetter  = null;
 
 // For J/Z motion detection
 let pinkyTrailX = [], indexTrailX = [], indexTrailY = [];
 const TRAIL_LEN = 18;
 
-function smoothPredict(rawLabel, rfConf) {
-  predHistory.push(rawLabel);
-  if (predHistory.length > SMOOTH_WINDOW) predHistory.shift();
+function smoothPredict(rawLabel, rfConf, votes) {
+  const now = Date.now();
 
-  // Majority vote
+  // Rolling buffer
+  predBuf.push({ label: rawLabel, conf: rfConf });
+  if (predBuf.length > CFG.BUFFER_SIZE) predBuf.shift();
+
+  // Majority vote over buffer
   const counts = {};
-  for (const l of predHistory) counts[l] = (counts[l]||0)+1;
-  let best = predHistory[predHistory.length-1], bestCount = 0;
-  for (const [l,c] of Object.entries(counts)) if (c > bestCount) { bestCount=c; best=l; }
+  for (const p of predBuf) counts[p.label] = (counts[p.label] || 0) + 1;
+  let best = rawLabel, bestCount = 0;
+  for (const [l, c] of Object.entries(counts)) { if (c > bestCount) { bestCount = c; best = l; } }
+  const majority = bestCount / predBuf.length;
 
-  const majority = bestCount / predHistory.length;
-
-  // Stable confirmation
-  if (best === stableCandidate) {
-    stableCandidateCount++;
-  } else {
-    stableCandidate = best;
-    stableCandidateCount = 1;
+  // Top-2 vote margin from current-frame RF votes
+  let top2margin = 1.0;
+  if (votes) {
+    const total = ASL_MODEL.t.length;
+    const sorted = Array.from(votes).sort((a, b) => b - a);
+    top2margin = sorted.length >= 2 ? (sorted[0] - sorted[1]) / total : 1.0;
   }
 
-  if (stableCandidateCount >= STABLE_FRAMES && rfConf >= CONF_THRESHOLD) {
+  // Stability clock: reset when candidate changes
+  if (best !== stableCandidate) { stableCandidate = best; stableStartTime = now; }
+  const heldMs   = now - stableStartTime;
+  const progress = Math.min(1, heldMs / CFG.STABLE_MS);
+
+  // Gate checks
+  const confOk   = rfConf  >= CFG.MIN_CONFIDENCE;
+  const marginOk = top2margin >= CFG.TOP2_MARGIN;
+  const stableOk = heldMs  >= CFG.STABLE_MS;
+  const coolOk   = (now - lastCommitTime) >= CFG.COOLDOWN_MS;
+
+  let committed = false;
+  if (stableOk && confOk && marginOk && coolOk) {
     confirmedLetter = best;
-    confirmedConf = rfConf;
+    lastCommitTime  = now;
+    committed       = true;
   }
 
-  return { confirmed: confirmedLetter, candidate: best, majority, rfConf, stableCandidateCount };
+  return { candidate: best, confirmed: confirmedLetter, majority,
+           rfConf, heldMs, progress, top2margin, confOk, marginOk, committed };
 }
 
 // ═══════════════════════════════════════════════════════
@@ -513,17 +588,55 @@ function updateMotionTrails(lm) {
 // ═══════════════════════════════════════════════════════
 const letterHistory = [];
 let lastAddedLetter = null;
-let lastAddTime = 0;
+let lastAddTime     = 0;
 
-function maybeAddToHistory(letter) {
-  const now = Date.now();
-  if (letter === lastAddedLetter && now - lastAddTime < 1500) return;
+// Central commit point — all letter confirmations go through here.
+function commitLetter(letter) {
   if (!letter || letter === '—') return;
-  lastAddedLetter = letter; lastAddTime = now;
+  const now = Date.now();
+  // Deduplicate: same letter within cooldown window → skip
+  if (letter === lastAddedLetter && now - lastAddTime < CFG.COOLDOWN_MS) return;
+  lastAddedLetter = letter;
+  lastAddTime     = now;
   letterHistory.push(letter);
   if (letterHistory.length > 12) letterHistory.shift();
   document.getElementById('historyText').textContent = letterHistory.join(' ') || '_ _ _';
+  speakLetter(letter);
+  const lc = document.getElementById('lastCommit');
+  if (lc) lc.textContent = `Last: ${letter}${ttsEnabled ? '  🔊' : ''}`;
 }
+
+// J/Z motion path still uses this shim
+function maybeAddToHistory(letter) { commitLetter(letter); }
+
+// ── Text-to-speech ─────────────────────────────────────────────────────────
+let ttsEnabled = CFG.TTS_ENABLED_DEFAULT;
+
+function toggleTTS() {
+  ttsEnabled = !ttsEnabled;
+  const btn = document.getElementById('ttsToggle');
+  if (btn) {
+    btn.textContent = ttsEnabled ? '🔊 Voice' : '🔇 Voice';
+    btn.classList.toggle('on', ttsEnabled);
+  }
+  if (!ttsEnabled) window.speechSynthesis && window.speechSynthesis.cancel();
+}
+
+function speakLetter(letter) {
+  if (!ttsEnabled || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();              // drop any queued utterance
+  const u    = new SpeechSynthesisUtterance(letter);
+  u.rate     = 0.85;
+  u.pitch    = 1.0;
+  u.volume   = 1.0;
+  window.speechSynthesis.speak(u);
+}
+
+// Initialise TTS button state on load
+window.addEventListener('load', () => {
+  const btn = document.getElementById('ttsToggle');
+  if (btn) btn.classList.toggle('on', ttsEnabled);
+});
 
 // ═══════════════════════════════════════════════════════
 // HAND CONNECTIONS (for skeleton drawing)
@@ -698,9 +811,18 @@ function onHandResults(results) {
       document.getElementById('wordConf').textContent  = 'No hand detected';
       document.getElementById('wordStatus').textContent = '';
     } else {
+      // Reset stability when hand absent long enough (blank gate)
+      if (Date.now() - lastHandTime > CFG.NO_HAND_RESET_MS) {
+        stableCandidate = null;
+        stableStartTime = 0;
+        lastCommitTime  = 0;   // waive cooldown → next sign commits promptly
+        predBuf.length  = 0;
+        document.getElementById('stabilityFill').style.width = '0%';
+        document.getElementById('calibHint').classList.remove('show');
+      }
       document.getElementById('aslLetter').textContent = '—';
-      document.getElementById('aslConf').textContent = 'No hand detected';
-      document.getElementById('aslConf').style.color = '#888';
+      document.getElementById('aslConf').textContent   = 'No hand detected';
+      document.getElementById('aslConf').style.color   = '#888';
       document.getElementById('aslStable').textContent = '';
       document.getElementById('debugContent').innerHTML =
         '<div style="color:#666">No hand detected</div>';
@@ -796,23 +918,60 @@ function onHandResults(results) {
     showMotionFlash(motionLetter);
   }
 
-  // ── Decide final label ────────────────────────────
-  // Priority: motion (J/Z) > high-conf RF > digit overlay
-  let rawLabel = rfResult.label;
-  let useConf  = rfResult.confidence;
+  lastHandTime = Date.now();  // track hand presence for blank-gate reset
 
-  if (digit && rfResult.confidence < 0.55) {
-    rawLabel = digit;
-    useConf  = 0.6; // rule-based, fixed confidence
+  // ── H disambiguation ─────────────────────────────
+  // H: index+middle point horizontally (sideways).
+  // U/V: index+middle point vertically (upward).
+  // Feature idx_dx (feat[18]) = horizontal pointing; idx_dy (feat[17]) = vertical.
+  // When RF says H but fingers point more vertically, check if U or V has
+  // meaningful votes and prefer them; otherwise penalise H confidence.
+  let rawLabel     = rfResult.label;
+  let useConf      = rfResult.confidence;
+  let hAmbiguous   = false;
+
+  if (rawLabel === 'H') {
+    const idx_dx = features[18];
+    const idx_dy = features[17];
+    // H needs strong horizontal component: |dx| should dominate |dy|
+    if (Math.abs(idx_dy) > Math.abs(idx_dx)) {
+      hAmbiguous = true;
+      const N    = ASL_MODEL.t.length;
+      const hIdx = ASL_MODEL.c.indexOf('H');
+      const uIdx = ASL_MODEL.c.indexOf('U');
+      const vIdx = ASL_MODEL.c.indexOf('V');
+      const hV   = rfResult.votes[hIdx] || 0;
+      const uV   = uIdx >= 0 ? (rfResult.votes[uIdx] || 0) : 0;
+      const vV   = vIdx >= 0 ? (rfResult.votes[vIdx] || 0) : 0;
+      if (uV >= hV * 0.55) {
+        rawLabel = 'U'; useConf = uV / N;
+      } else if (vV >= hV * 0.55) {
+        rawLabel = 'V'; useConf = vV / N;
+      } else {
+        useConf *= 0.65;  // penalise: geometry says not H, but no strong alternative
+      }
+    }
   }
 
-  const smooth = smoothPredict(rawLabel, useConf);
-  const displayLetter = smooth.confirmed || smooth.candidate || '—';
+  // ── Digit override ────────────────────────────────
+  const digitOverride = digit && rfResult.confidence < 0.55;
+  if (digitOverride) {
+    rawLabel = digit;
+    useConf  = 0.6;
+  }
+
+  const smooth = smoothPredict(rawLabel, useConf, digitOverride ? null : rfResult.votes);
+  const displayLetter = smooth.candidate || '—';
+
+  // ── Commit on stability ───────────────────────────
+  if (smooth.committed) commitLetter(smooth.candidate);
 
   // ── Update main badge ─────────────────────────────
   const letterEl  = document.getElementById('aslLetter');
   const confEl    = document.getElementById('aslConf');
   const stableEl  = document.getElementById('aslStable');
+  const fillEl    = document.getElementById('stabilityFill');
+  const calibEl   = document.getElementById('calibHint');
 
   // Motion letter takes over badge temporarily
   if (Date.now() < motionDisplayUntil && detectedMotionLetter) {
@@ -820,22 +979,44 @@ function onHandResults(results) {
     confEl.textContent   = 'Motion gesture';
     confEl.style.color   = '#ffdd00';
     stableEl.textContent = '';
+    if (fillEl) fillEl.style.width = '0%';
     maybeAddToHistory(detectedMotionLetter);
   } else {
     letterEl.textContent = displayLetter;
     const pct = Math.round(smooth.rfConf * 100);
-    confEl.textContent   = `RF confidence: ${pct}%`;
-    confEl.style.color   = pct >= 60 ? '#4aff4a' : pct >= 40 ? '#ffaa4a' : '#ff4a4a';
-    const stablePct = Math.round((smooth.stableCandidateCount / STABLE_FRAMES) * 100);
-    stableEl.textContent = smooth.stableCandidateCount >= STABLE_FRAMES
-      ? `✓ Stable (${smooth.majority*100|0}% majority)`
-      : `Stabilising… ${stablePct}%`;
+    confEl.textContent   = `Confidence: ${pct}%${hAmbiguous ? '  ⚠ H?' : ''}`;
+    confEl.style.color   = pct >= 65 ? '#4aff4a' : pct >= 45 ? '#ffaa4a' : '#ff4a4a';
+
+    // Stability progress bar
+    if (fillEl) {
+      fillEl.style.width      = Math.round(smooth.progress * 100) + '%';
+      fillEl.style.background = smooth.progress >= 1
+        ? (smooth.confOk && smooth.marginOk ? '#4aff4a' : '#ffaa4a')
+        : '#4a9eff';
+    }
+
+    // Status text
+    const remaining = Math.max(0, CFG.STABLE_MS - smooth.heldMs);
+    if (smooth.progress >= 1 && smooth.confOk && smooth.marginOk) {
+      stableEl.textContent = `✓ Committed  (${(smooth.majority*100)|0}% majority)`;
+      stableEl.style.color = '#4aff4a';
+    } else if (smooth.heldMs > 80) {
+      stableEl.textContent = `Hold ${(remaining/1000).toFixed(1)}s…`;
+      stableEl.style.color = '#aaa';
+    } else {
+      stableEl.textContent = '';
+    }
   }
 
-  // Add to history when stable
-  if (smooth.stableCandidateCount === STABLE_FRAMES) {
-    maybeAddToHistory(smooth.confirmed || smooth.candidate);
+  // ── Calibration hint ──────────────────────────────
+  let hint = '';
+  if (smooth.heldMs > 350) {
+    if (!smooth.marginOk)    hint = 'Hold steady — pose unclear';
+    else if (!smooth.confOk) hint = 'Move hand to centre';
+    else if (smooth.majority < 0.5) hint = 'Rotate hand slightly';
   }
+  if (hAmbiguous && rfResult.label === 'H') hint = 'Point fingers sideways for H';
+  if (calibEl) { calibEl.textContent = hint; calibEl.classList.toggle('show', hint !== ''); }
 
   // ── Debug panel ───────────────────────────────────
   const feats = features;
@@ -851,16 +1032,20 @@ function onHandResults(results) {
       .sort((a,b)=>b.v-a.v).slice(0,3);
   const top3 = sortedVotes.map(e=>`${e.c}:${Math.round(e.v/ASL_MODEL.t.length*100)}%`).join('  ');
 
+  const marginPct = Math.round(smooth.top2margin * 100);
+  const marginCol = smooth.marginOk ? '#4aff4a' : '#ff4a4a';
   document.getElementById('debugContent').innerHTML = `
-    <div class="dbRow"><span class="dbKey">Raw RF:</span><span class="dbVal">${rfResult.label} (${Math.round(rfResult.confidence*100)}%)</span></div>
-    <div class="dbRow"><span class="dbKey">Smooth:</span><span class="dbVal">${displayLetter} (${Math.round(smooth.majority*100)}%)</span></div>
+    <div class="dbRow"><span class="dbKey">Raw RF:</span><span class="dbVal">${rfResult.label} (${Math.round(rfResult.confidence*100)}%)${hAmbiguous?' ⚠H':''}</span></div>
+    <div class="dbRow"><span class="dbKey">Candidate:</span><span class="dbVal">${displayLetter} (${Math.round(smooth.majority*100)}% buf)</span></div>
+    <div class="dbRow"><span class="dbKey">Stability:</span><span class="dbVal">${smooth.heldMs}ms / ${CFG.STABLE_MS}ms</span></div>
+    <div class="dbRow"><span class="dbKey">Top-2 gap:</span><span style="color:${marginCol};font-weight:bold">${marginPct}% (need ${CFG.TOP2_MARGIN*100|0}%)</span></div>
     <div class="dbRow"><span class="dbKey">Digit?</span><span class="dbVal">${digit||'—'}</span></div>
     <div class="dbRow"><span class="dbKey">Motion:</span><span class="dbVal">${detectedMotionLetter&&Date.now()<motionDisplayUntil?detectedMotionLetter:'—'}</span></div>
     <div style="margin:4px 0;font-size:10px">Ext: ${extBar}</div>
     <div class="dbRow" style="font-size:10px"><span class="dbKey">Top-3:</span><span style="color:#aaa">${top3}</span></div>
+    <div class="dbRow" style="font-size:10px"><span class="dbKey">idxDX:</span><span style="color:#aaa">${feats[18].toFixed(2)}</span>
+      <span class="dbKey">idxDY:</span><span style="color:#aaa">${feats[17].toFixed(2)}</span></div>
     <div class="dbRow" style="font-size:10px"><span class="dbKey">dThI:</span><span style="color:#aaa">${feats[14].toFixed(2)}</span>
-      <span class="dbKey">dThM:</span><span style="color:#aaa">${feats[15].toFixed(2)}</span></div>
-    <div class="dbRow" style="font-size:10px"><span class="dbKey">idxDY:</span><span style="color:#aaa">${feats[17].toFixed(2)}</span>
       <span class="dbKey">cross:</span><span style="color:#aaa">${feats[22].toFixed(2)}</span></div>
   `;
 }
