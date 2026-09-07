@@ -2,7 +2,7 @@
 Step F helper — Export trained PyTorch GRU model to TensorFlow.js format.
 
 Converts train/checkpoints/best_model.pt → model/word_gru/model.json
-so that index.html can load it with tf.loadLayersModel().
+so that index.html can load it with tf.loadGraphModel().
 
 Conversion path:  PyTorch → ONNX → TF SavedModel → TF.js
 
