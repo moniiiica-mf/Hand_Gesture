@@ -2,7 +2,7 @@
 
 Browser-based American Sign Language (ASL) recognition system with two modes:
 
-- **Letter mode** — fingerspelling (A–Y + digits + J/Z motion) via an embedded Random Forest; runs fully offline in the browser with no model files needed.
+- **Letter mode** — fingerspelling (A–Y + digits + J/Z motion) via an embedded Random Forest; runs in the browser with no separate letter-model files; initial loading requires the MediaPipe and TensorFlow.js CDNs.
 - **Word mode** — dynamic word-level signs ("hello", "how", "how are you", "you", "today") via a GRU trained on MS-ASL clips and served as a TF.js model.
 
 ---
@@ -29,7 +29,7 @@ Browser-based American Sign Language (ASL) recognition system with two modes:
 
 ```bash
 python -m http.server 8080
-# Open http://localhost:8080 — allow camera access.
+# Open http://localhost:8080 — click Start camera, then allow camera access.
 ```
 
 ---
@@ -50,7 +50,7 @@ python -m http.server 8080
 | Behaviour | Before | After |
 |---|---|---|
 | How a letter is committed | After N consecutive matching frames | After 750 ms of stable majority vote |
-| Rapid-fire duplicates | Common when holding a pose | Blocked by 700 ms cooldown gate |
+| Rapid-fire duplicates | Common when holding a pose | One commit per continuous hold, plus a 700 ms cooldown gate |
 | Ambiguous pose (top-2 too close) | Committed anyway | Held until margin ≥ 15 % |
 | H vs U/V confusion | Frequent mis-fires | Geometry check: H only commits when fingers point sideways |
 | Voice feedback | Silent | Web Speech API reads each committed letter aloud (toggle with 🔊 Voice) |
@@ -86,7 +86,7 @@ Run through these checks after any threshold change:
 - [ ] **Single commit per hold** — Hold A steady for 1 s → exactly one "A" appears in
       the history bar; no rapid repeats.
 - [ ] **Cooldown gate** — Sign A, immediately re-sign A without lifting your hand →
-      second commit is blocked until the blue bar refills.
+      second commit is blocked until the hand is lowered or a different stable letter is signed.
 - [ ] **No-hand reset** — Drop your hand fully for 0.5 s, then sign B → B commits
       cleanly (cooldown waived after reset).
 - [ ] **H vs U/V** — Point two fingers **upward** → should predict U or V, not H.
@@ -441,3 +441,46 @@ Hand_Gesture/
 2. Re-run Steps B → F.
 3. Update `WORD_CLASSES` in `index.html` to match the new class list.
 4. Update `TARGET_PHRASES` in `inference/phrase_assembler.py`.
+
+## Live recognition update
+
+The camera workspace now includes explicit Start/Stop controls, a mirrored feed
+with an aligned landmark overlay, a separate recognition panel, readable history,
+voice feedback, optional diagnostics, and a responsive mobile layout. Backspace
+clears the active history; `?` toggles diagnostics. Camera permission failures
+show an inline explanation and a retry button. Camera tracks stop on page exit.
+
+Recognition fixes:
+
+- Only one camera stream and one MediaPipe request run at a time, including
+  across stop/restart. Duplicate video frames are skipped and hidden tabs pause
+  processing. Capture requests up to 30 fps at an ideal 960 × 540 resolution.
+- Letters require a 70% rolling majority that agrees with the current confident
+  observation for the full hold interval. Low confidence resets that interval.
+  Holding a letter commits once; lower your hand for 400 ms to repeat it.
+- Motion letters enter history once per detected motion event. J/Z remain
+  heuristic and require validation with real signing footage.
+- Word inference requires 30 collected frames, runs at most every 200 ms,
+  and never overlaps. Mode changes, hand loss, history clearing, and camera
+  stops invalidate pending results. All temporary tensors are disposed.
+- Browser word resampling uses the same floor indices as Python extraction.
+- Word loading uses `tf.loadGraphModel`, matching the SavedModel export, checks
+  `classes.json` order, and applies softmax once to the exported logits.
+
+The optional word model is **not included in this repository**. Export it using
+the training pipeline and provide `model/word_gru/model.json`, all referenced
+weight shards, and `classes.json`. Word mode supports only the five trained
+classes; it is not a general ASL translator. Live accuracy and latency depend on
+the trained model, signing style, lighting, and device, and have not been
+benchmarked by this update.
+
+Run the dependency-free regression suite with Node.js:
+
+```bash
+node --test tests/recognition.test.cjs
+```
+
+Before releasing, test with a real camera: Start/Stop/restart, denied permission,
+portrait/mobile resize, single held letters, repeated letters after lowering the
+hand, J/Z, and the exported five-class word model. Automated tests use synthetic
+landmarks and mocked inference; they do not establish recognition accuracy.

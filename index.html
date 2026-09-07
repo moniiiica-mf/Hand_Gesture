@@ -4,282 +4,39 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ASL Gesture Recognition</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      overflow: hidden;
-      background: #000;
-      color: #fff;
-    }
-
-    #videoContainer {
-      position: fixed; top: 0; left: 0;
-      width: 100vw; height: 100vh; overflow: hidden;
-    }
-
-    #video {
-      position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%) scaleX(-1);
-      min-width: 100%; min-height: 100%;
-      width: auto; height: auto;
-    }
-
-    #canvas {
-      position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none; z-index: 10;
-    }
-
-    /* Main ASL letter badge — large, top-centre */
-    #aslBadge {
-      position: fixed;
-      top: 16px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.82);
-      border: 2px solid rgba(74,158,255,0.6);
-      border-radius: 12px;
-      padding: 10px 32px;
-      z-index: 100;
-      text-align: center;
-      backdrop-filter: blur(10px);
-      min-width: 160px;
-    }
-    #aslLetter {
-      font-size: 72px;
-      font-weight: 900;
-      line-height: 1;
-      color: #fff;
-      letter-spacing: 2px;
-    }
-    #aslConf {
-      font-size: 13px;
-      color: #4a9eff;
-      margin-top: 2px;
-    }
-    #aslStable {
-      font-size: 11px;
-      color: #aaa;
-      margin-top: 2px;
-    }
-
-    /* Stability progress bar */
-    #stabilityWrap {
-      width: 100%; height: 4px;
-      background: rgba(255,255,255,0.12);
-      border-radius: 2px; overflow: hidden;
-      margin-top: 6px;
-    }
-    #stabilityFill {
-      height: 100%; width: 0%;
-      border-radius: 2px;
-      background: #4a9eff;
-      transition: width 0.08s linear, background 0.25s;
-    }
-    /* Last committed letter */
-    #lastCommit {
-      font-size: 11px; color: #666;
-      margin-top: 4px; min-height: 14px;
-    }
-    /* TTS toggle */
-    #ttsToggle {
-      position: fixed; bottom: 68px; right: 16px;
-      background: rgba(0,0,0,0.82);
-      border: 2px solid rgba(255,255,255,0.2);
-      border-radius: 10px; padding: 7px 14px;
-      color: #888; font-size: 13px; font-weight: 600;
-      cursor: pointer; z-index: 200;
-      backdrop-filter: blur(10px);
-      transition: border-color 0.2s, color 0.2s;
-      user-select: none;
-    }
-    #ttsToggle.on { border-color: #4aff4a; color: #4aff4a; }
-    /* Calibration hint */
-    #calibHint {
-      position: fixed; bottom: 120px; left: 50%;
-      transform: translateX(-50%);
-      background: rgba(255,170,0,0.92);
-      color: #000; font-size: 13px; font-weight: 600;
-      padding: 6px 18px; border-radius: 20px;
-      z-index: 200; pointer-events: none;
-      opacity: 0; transition: opacity 0.25s;
-      white-space: nowrap;
-    }
-    #calibHint.show { opacity: 1; }
-
-    /* Debug panel */
-    #debugPanel {
-      position: fixed; top: 10px; left: 10px;
-      background: rgba(0,0,0,0.82);
-      padding: 12px; border-radius: 8px;
-      font-size: 11px; font-family: 'Courier New', monospace;
-      max-width: 260px; z-index: 100;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,0.1);
-    }
-    .dbRow { display:flex; justify-content:space-between; margin:2px 0; }
-    .dbKey { color:#888; }
-    .dbVal { color:#fff; font-weight:bold; }
-
-    /* History bar — bottom */
-    #historyBar {
-      position: fixed; bottom: 20px; left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.75);
-      border-radius: 8px; padding: 8px 20px;
-      font-size: 28px; font-weight: 700;
-      letter-spacing: 6px; z-index: 100;
-      min-width: 300px; text-align: center;
-      border: 1px solid rgba(255,255,255,0.15);
-      backdrop-filter: blur(8px);
-    }
-
-    /* Loading overlay */
-    #loading {
-      position: fixed; top:50%; left:50%;
-      transform:translate(-50%,-50%);
-      text-align:center; z-index:1000; font-size:16px;
-    }
-    .spinner {
-      width:48px; height:48px;
-      border:4px solid rgba(255,255,255,0.2);
-      border-top-color:#4a9eff;
-      border-radius:50%;
-      animation:spin 1s linear infinite;
-      margin:0 auto 14px;
-    }
-    @keyframes spin { to { transform:rotate(360deg); } }
-
-    /* Motion flash for J/Z */
-    .motionFlash {
-      position:fixed; top:50%; left:50%;
-      transform:translate(-50%,-50%);
-      font-size:80px; font-weight:900;
-      color:rgba(255,220,0,1);
-      text-shadow:0 0 30px rgba(255,220,0,0.8);
-      pointer-events:none;
-      animation:motFade 0.8s ease-out forwards;
-      z-index:200;
-    }
-    @keyframes motFade {
-      0%  {opacity:1;transform:translate(-50%,-50%) scale(0.8);}
-      40% {opacity:1;transform:translate(-50%,-50%) scale(1.1);}
-      100%{opacity:0;transform:translate(-50%,-50%) scale(1);}
-    }
-
-    /* Mode toggle button */
-    #modeToggle {
-      position: fixed; top: 16px; right: 16px;
-      background: rgba(0,0,0,0.82);
-      border: 2px solid rgba(255,255,255,0.25);
-      border-radius: 10px; padding: 8px 18px;
-      color: #fff; font-size: 13px; font-weight: 600;
-      cursor: pointer; z-index: 200;
-      backdrop-filter: blur(10px);
-      transition: border-color 0.2s;
-    }
-    #modeToggle:hover { border-color: #4a9eff; }
-    #modeToggle.word-mode { border-color: #ffaa4a; color: #ffaa4a; }
-
-    /* Word-sign badge */
-    #wordBadge {
-      position: fixed;
-      top: 16px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.82);
-      border: 2px solid rgba(255,170,74,0.6);
-      border-radius: 12px;
-      padding: 10px 32px;
-      z-index: 100;
-      text-align: center;
-      backdrop-filter: blur(10px);
-      min-width: 200px;
-      display: none;
-    }
-    #wordLabel {
-      font-size: 48px; font-weight: 900; line-height: 1;
-      color: #fff; letter-spacing: 1px;
-    }
-    #wordConf {
-      font-size: 13px; color: #ffaa4a; margin-top: 2px;
-    }
-    #wordStatus {
-      font-size: 11px; color: #aaa; margin-top: 2px;
-    }
-
-    /* Phrase display bar */
-    #phraseBar {
-      position: fixed; bottom: 60px; left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.82);
-      border-radius: 10px; padding: 10px 24px;
-      font-size: 20px; font-weight: 600;
-      letter-spacing: 2px; z-index: 100;
-      min-width: 320px; text-align: center;
-      border: 1px solid rgba(255,170,74,0.3);
-      backdrop-filter: blur(8px);
-      color: #ffaa4a;
-      display: none;
-    }
-
-    /* Model status indicator */
-    #modelStatus {
-      position: fixed; bottom: 16px; right: 16px;
-      font-size: 11px; color: #888; z-index: 100;
-      background: rgba(0,0,0,0.6);
-      border-radius: 6px; padding: 4px 10px;
-      backdrop-filter: blur(6px);
-    }
-    #modelStatus.loaded { color: #4aff4a; }
-    #modelStatus.error  { color: #ff4a4a; }
-  </style>
+  <meta name="description" content="Practice ASL fingerspelling with live hand tracking and stable recognition.">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
-<div id="videoContainer">
-  <video id="video" autoplay playsinline></video>
-  <canvas id="canvas"></canvas>
-</div>
-
-<div id="aslBadge">
-  <div id="aslLetter">—</div>
-  <div id="aslConf">Waiting for hand...</div>
-  <div id="aslStable"></div>
-  <div id="stabilityWrap"><div id="stabilityFill"></div></div>
-  <div id="lastCommit"></div>
-</div>
-
-<div id="calibHint"></div>
-<button id="ttsToggle" onclick="toggleTTS()">🔊 Voice</button>
-
-<div id="debugPanel">
-  <div style="color:#4a9eff;font-weight:bold;margin-bottom:6px;">ASL Debug</div>
-  <div id="debugContent"><div style="color:#666">No hand detected</div></div>
-</div>
-
-<div id="historyBar" title="Recognised letters">
-  <span id="historyText" style="color:#4a9eff">_ _ _</span>
-</div>
-
-<!-- Word-sign mode UI (hidden until mode toggled) -->
-<div id="wordBadge">
-  <div id="wordLabel">—</div>
-  <div id="wordConf">Collecting frames…</div>
-  <div id="wordStatus"></div>
-</div>
-<div id="phraseBar">…</div>
-<div id="modelStatus">Word model: not loaded</div>
-
-<button id="modeToggle" onclick="toggleMode()">Switch to Word Mode</button>
-
-<div id="loading">
-  <div class="spinner"></div>
-  <div>Loading ASL model...</div>
-</div>
+<header class="app-header"><a class="brand" href="./">SIGN<span>AL</span><span class="brand-caption">ASL recognition studio</span></a><span class="privacy">Camera processing stays on your device</span></header>
+<main class="workspace">
+  <section class="camera-section" aria-labelledby="workspaceTitle">
+    <div class="section-heading"><div><p class="eyebrow">LIVE WORKSPACE</p><h1 id="workspaceTitle">A little movement.<br>A lot to say.</h1></div><span id="cameraStatus" role="status">Camera off</span></div>
+    <div id="videoContainer">
+      <video id="video" autoplay playsinline muted></video><canvas id="canvas"></canvas>
+      <div class="view-label">MIRRORED VIEW <span>•</span> 21-point hand tracking</div>
+      <div id="loading" role="status"><div class="camera-icon">◎</div><h2>Ready when you are.</h2><p id="cameraMessage">Start your camera and hold one hand in the frame.</p><button id="startCamera" class="primary" onclick="init()">Start camera <span>↗</span></button></div>
+      <div id="calibHint" role="status"></div>
+    </div>
+    <div class="camera-toolbar"><span>Face your palm toward the camera in good light.</span><button id="cameraToggle" onclick="stopCamera()" disabled>Stop camera</button></div>
+    <div class="guide"><span class="step-number">01</span><p><strong>Frame your hand</strong>Keep all fingers visible.</p><span class="step-number">02</span><p><strong>Hold your sign</strong>Let the progress bar fill.</p><span class="step-number">03</span><p><strong>Keep going</strong>Lower your hand to repeat a letter.</p></div>
+  </section>
+  <aside class="recognition-panel" aria-label="Recognition">
+    <div class="panel-heading"><p class="eyebrow">RECOGNITION</p><button id="modeToggle" onclick="toggleMode()">Switch to Word Mode</button></div>
+    <div id="aslBadge"><p class="result-caption">Current letter</p><div id="aslLetter">—</div><div id="aslConf">Waiting for hand…</div><div id="stabilityWrap"><div id="stabilityFill"></div></div><div id="aslStable"></div><div id="lastCommit" role="status"></div></div>
+    <div id="wordBadge" style="display:none"><p class="result-caption">Current word</p><div id="wordLabel">—</div><div id="wordConf">Collecting frames…</div><div id="wordStatus" role="status"></div></div>
+    <div class="transcript-heading"><h2>Your sequence</h2><button onclick="clearHistory()" aria-label="Clear recognition history">Clear</button></div>
+    <div id="historyBar"><span id="historyText">Your letters appear here</span></div><div id="phraseBar" style="display:none">Your words appear here</div>
+    <div class="panel-footer"><button id="ttsToggle" onclick="toggleTTS()" aria-pressed="true">🔊 Voice</button><button onclick="toggleDebug()" aria-controls="debugPanel" id="debugToggle" aria-expanded="false">Diagnostics</button></div>
+    <div id="modelStatus" role="status">Letter recognition ready · word model optional</div>
+    <p class="practice-note">A practice tool for fingerspelling and a small trained word vocabulary. Predictions may need correction.</p>
+    <div id="debugPanel" style="display:none"><h2>Tracking diagnostics</h2><div id="debugContent">No hand detected</div></div>
+  </aside>
+</main>
+<footer class="app-footer"><span>EXPRESS. RECOGNIZE. CONNECT.</span><span>ASL · Letters &amp; words</span></footer>
 
 <!-- MediaPipe Hands (CDN) -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
 <!-- TensorFlow.js — used for word-sign GRU inference -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js" crossorigin="anonymous"></script>
 
@@ -483,6 +240,7 @@ let stableStartTime  = 0;
 let lastCommitTime   = 0;
 let lastHandTime     = 0;
 let confirmedLetter  = null;
+let committedForHold = false;
 
 // For J/Z motion detection
 let pinkyTrailX = [], indexTrailX = [], indexTrailY = [];
@@ -511,7 +269,13 @@ function smoothPredict(rawLabel, rfConf, votes) {
   }
 
   // Stability clock: reset when candidate changes
-  if (best !== stableCandidate) { stableCandidate = best; stableStartTime = now; }
+  if (best !== stableCandidate) {
+    stableCandidate = best; stableStartTime = now; committedForHold = false;
+  }
+  // A historical majority must agree with the current confident observation.
+  const evidenceOk = best === rawLabel && majority >= 0.7 &&
+    rfConf >= CFG.MIN_CONFIDENCE && top2margin >= CFG.TOP2_MARGIN;
+  if (!evidenceOk) stableStartTime = now;
   const heldMs   = now - stableStartTime;
   const progress = Math.min(1, heldMs / CFG.STABLE_MS);
 
@@ -522,14 +286,15 @@ function smoothPredict(rawLabel, rfConf, votes) {
   const coolOk   = (now - lastCommitTime) >= CFG.COOLDOWN_MS;
 
   let committed = false;
-  if (stableOk && confOk && marginOk && coolOk) {
+  if (stableOk && evidenceOk && coolOk && !committedForHold) {
+    committedForHold = true;
     confirmedLetter = best;
     lastCommitTime  = now;
     committed       = true;
   }
 
   return { candidate: best, confirmed: confirmedLetter, majority,
-           rfConf, heldMs, progress, top2margin, confOk, marginOk, committed };
+           rfConf, heldMs, progress, top2margin, confOk, marginOk, committed, committedForHold };
 }
 
 // ═══════════════════════════════════════════════════════
@@ -606,8 +371,6 @@ function commitLetter(letter) {
   if (lc) lc.textContent = `Last: ${letter}${ttsEnabled ? '  🔊' : ''}`;
 }
 
-// J/Z motion path still uses this shim
-function maybeAddToHistory(letter) { commitLetter(letter); }
 
 // ── Text-to-speech ─────────────────────────────────────────────────────────
 let ttsEnabled = CFG.TTS_ENABLED_DEFAULT;
@@ -618,6 +381,7 @@ function toggleTTS() {
   if (btn) {
     btn.textContent = ttsEnabled ? '🔊 Voice' : '🔇 Voice';
     btn.classList.toggle('on', ttsEnabled);
+    btn.setAttribute('aria-pressed', String(ttsEnabled));
   }
   if (!ttsEnabled) window.speechSynthesis && window.speechSynthesis.cancel();
 }
@@ -636,6 +400,7 @@ function speakLetter(letter) {
 window.addEventListener('load', () => {
   const btn = document.getElementById('ttsToggle');
   if (btn) btn.classList.toggle('on', ttsEnabled);
+    btn.setAttribute('aria-pressed', String(ttsEnabled));
 });
 
 // ═══════════════════════════════════════════════════════
@@ -671,10 +436,15 @@ const PALM_A = 5, PALM_B = 17;  // landmark indices for palm-width normalisation
 
 // State
 let wordMode     = false;
-let wordModel    = null;        // tf.LayersModel once loaded
+let wordModel    = null;        // tf.GraphModel exported from the PyTorch pipeline
 let wordBuffer   = [];          // rolling window: Array of Float32Array(WORD_FEAT_DIM)
 let phraseTokens = [];          // confirmed word tokens
 let wordCooldownUntil = 0;
+let wordGeneration = 0;
+let wordInFlight = false;
+let lastWordInference = 0;
+let wordLoadPromise = null;
+const WORD_INFERENCE_INTERVAL = 200;
 
 // ── Feature extraction (mirrors extract_sequences.py) ─────────────────────
 function extractWordFeatures(lm) {
@@ -702,7 +472,7 @@ function resampleBuffer(buf) {
 
   for (let i = 0; i < WORD_SEQ_LEN; i++) {
     const srcIdx = T >= WORD_SEQ_LEN
-      ? Math.round(i * (T - 1) / (WORD_SEQ_LEN - 1))
+      ? Math.floor(i * (T - 1) / (WORD_SEQ_LEN - 1))
       : i;                                               // end-pad with zeros
     if (srcIdx < T) {
       out.set(buf[srcIdx], i * WORD_FEAT_DIM);
@@ -713,18 +483,46 @@ function resampleBuffer(buf) {
 
 // ── GRU inference via TF.js ───────────────────────────────────────────────
 async function inferWord() {
-  if (!wordModel) return null;
-  if (wordBuffer.length < 5) return null;               // too few frames yet
+  if (!wordModel || wordBuffer.length < WORD_SEQ_LEN) return null;
+  const input = tf.tensor3d(resampleBuffer(wordBuffer), [1, WORD_SEQ_LEN, WORD_FEAT_DIM]);
+  let output, probabilities;
+  try {
+    output = await wordModel.executeAsync(input);
+    const logits = Array.isArray(output) ? output[0] : output;
+    if (!logits || logits.size !== WORD_CLASSES.length) throw new Error('Unexpected word model output');
+    probabilities = tf.softmax(logits);
+    const probs = await probabilities.data();
+    if (!Array.from(probs).every(Number.isFinite)) throw new Error('Invalid word probabilities');
+    let best = 0;
+    for (let i = 1; i < probs.length; i++) if (probs[i] > probs[best]) best = i;
+    return { label: WORD_CLASSES[best], confidence: probs[best] };
+  } finally {
+    input.dispose();
+    if (output) tf.dispose(output);
+    if (probabilities) probabilities.dispose();
+  }
+}
 
-  const flat = resampleBuffer(wordBuffer);
-  const input = tf.tensor3d(flat, [1, WORD_SEQ_LEN, WORD_FEAT_DIM]);
-  const logits = wordModel.predict(input);
-  const probs  = await tf.softmax(logits).data();
-  input.dispose(); logits.dispose();
-
-  let best = 0;
-  for (let i = 1; i < probs.length; i++) if (probs[i] > probs[best]) best = i;
-  return { label: WORD_CLASSES[best], confidence: probs[best], probs: Array.from(probs) };
+async function recognizeWord() {
+  const now = Date.now();
+  if (wordInFlight || now < wordCooldownUntil || now - lastWordInference < WORD_INFERENCE_INTERVAL) return;
+  wordInFlight = true;
+  lastWordInference = now;
+  const generation = wordGeneration;
+  try {
+    const res = await inferWord();
+    if (!res || generation !== wordGeneration || !wordMode || !state.cameraActive) return;
+    document.getElementById('wordLabel').textContent = res.label.replaceAll('_', ' ');
+    document.getElementById('wordConf').textContent = `Confidence: ${Math.round(res.confidence * 100)}%`;
+    if (res.confidence >= WORD_CONF_THR) {
+      addWordToPhrase(res.label);
+      wordCooldownUntil = Date.now() + WORD_COOLDOWN;
+      wordBuffer = [];
+    }
+  } catch (error) {
+    if (generation === wordGeneration) document.getElementById('wordStatus').textContent = 'Recognition unavailable. Check the exported model.';
+    console.error('Word inference failed:', error);
+  } finally { wordInFlight = false; }
 }
 
 // ── Phrase assembler ──────────────────────────────────────────────────────
@@ -738,26 +536,39 @@ function addWordToPhrase(word) {
 
 function updatePhraseBar() {
   const bar = document.getElementById('phraseBar');
-  bar.textContent = phraseTokens.length ? phraseTokens.join(' ') : '…';
+  bar.textContent = phraseTokens.length ? phraseTokens.map(word => word.replaceAll('_', ' ')).join(' ') : 'Your words appear here';
 }
 
 // ── Load TF.js model ──────────────────────────────────────────────────────
 async function loadWordModel() {
+  if (wordModel) return;
+  if (wordLoadPromise) return wordLoadPromise;
   const statusEl = document.getElementById('modelStatus');
-  try {
-    wordModel = await tf.loadLayersModel('model/word_gru/model.json');
-    statusEl.textContent = 'Word model: loaded ✓';
-    statusEl.className   = 'loaded';
-    log.info && log.info('Word GRU model loaded');
-  } catch (e) {
-    statusEl.textContent = 'Word model: not found (train first)';
-    statusEl.className   = 'error';
-    // Not fatal — word mode works as soon as model is placed in model/word_gru/
-  }
+  statusEl.textContent = 'Loading word recognition…';
+  wordLoadPromise = (async () => {
+    let loaded;
+    try {
+      const response = await fetch('model/word_gru/classes.json');
+      if (!response.ok) throw new Error('Word classes unavailable');
+      const classes = await response.json();
+      if (JSON.stringify(classes) !== JSON.stringify(WORD_CLASSES)) throw new Error('Word class order mismatch');
+      loaded = await tf.loadGraphModel('model/word_gru/model.json');
+      wordModel = loaded;
+      statusEl.textContent = 'Word recognition ready';
+      statusEl.className = 'loaded';
+    } catch (error) {
+      if (loaded) loaded.dispose();
+      statusEl.textContent = 'Word model unavailable · letter mode is ready';
+      statusEl.className = 'error';
+      console.warn('Word model unavailable:', error);
+    }
+  })();
+  try { await wordLoadPromise; } finally { wordLoadPromise = null; }
 }
 
 // ── Mode toggle ───────────────────────────────────────────────────────────
 function toggleMode() {
+  resetRecognition();
   wordMode = !wordMode;
   const btn      = document.getElementById('modeToggle');
   const aslBadge = document.getElementById('aslBadge');
@@ -773,7 +584,6 @@ function toggleMode() {
     wordBadge.style.display = 'block';
     phraseBar.style.display = 'block';
     wordBuffer = [];
-    phraseTokens = [];
     updatePhraseBar();
     if (!wordModel) loadWordModel();
   } else {
@@ -800,9 +610,12 @@ function onHandResults(results) {
   const ctx    = canvas.getContext('2d');
   const W = state.videoDisplayWidth, H = state.videoDisplayHeight;
 
+  if (!state.cameraActive) return;
   ctx.clearRect(0, 0, W, H);
 
   if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+    wordGeneration++; // Invalidate work from the last visible hand.
+    if (Date.now() - lastHandTime > CFG.NO_HAND_RESET_MS) resetRecognition();
     if (wordMode) {
       // Push zero vector so sequence isn't artificially short during occlusion
       wordBuffer.push(new Float32Array(WORD_FEAT_DIM));
@@ -813,6 +626,7 @@ function onHandResults(results) {
     } else {
       // Reset stability when hand absent long enough (blank gate)
       if (Date.now() - lastHandTime > CFG.NO_HAND_RESET_MS) {
+        committedForHold = false;
         stableCandidate = null;
         stableStartTime = 0;
         lastCommitTime  = 0;   // waive cooldown → next sign commits promptly
@@ -834,6 +648,7 @@ function onHandResults(results) {
 
   // Use first detected hand
   const lm = results.multiHandLandmarks[0];
+  lastHandTime = Date.now();
 
   // ── Draw skeleton ─────────────────────────────────
   ctx.save();
@@ -873,28 +688,14 @@ function onHandResults(results) {
     if (!wordModel) {
       wordEl.textContent  = '—';
       wconfEl.textContent = 'Model not loaded';
-      wstatEl.textContent = 'Place model in model/word_gru/model.json';
+      wstatEl.textContent = 'Switch to letter mode while the word model is unavailable.';
     } else {
       const framePct = Math.min(100, Math.round(wordBuffer.length / WORD_SEQ_LEN * 100));
       wstatEl.textContent = framePct < 100
         ? `Collecting… ${framePct}%`
         : `Window full (${wordBuffer.length} frames)`;
 
-      if (Date.now() > wordCooldownUntil) {
-        inferWord().then(res => {
-          if (!res) return;
-          const pct = Math.round(res.confidence * 100);
-          wordEl.textContent  = res.label.replace('_', ' ');
-          wconfEl.textContent = `Confidence: ${pct}%`;
-          wconfEl.style.color = pct >= 70 ? '#4aff4a' : pct >= 50 ? '#ffaa4a' : '#ff4a4a';
-
-          if (res.confidence >= WORD_CONF_THR) {
-            addWordToPhrase(res.label);
-            wordCooldownUntil = Date.now() + WORD_COOLDOWN;
-            wordBuffer = [];  // reset window after confirmed sign
-          }
-        });
-      }
+      if (wordBuffer.length >= WORD_SEQ_LEN) recognizeWord();
     }
     return;   // skip letter-mode pipeline below
   }
@@ -916,6 +717,7 @@ function onHandResults(results) {
     detectedMotionLetter = motionLetter;
     motionDisplayUntil = Date.now() + 1200;
     showMotionFlash(motionLetter);
+    commitLetter(motionLetter);
   }
 
   lastHandTime = Date.now();  // track hand presence for blank-gate reset
@@ -964,7 +766,7 @@ function onHandResults(results) {
   const displayLetter = smooth.candidate || '—';
 
   // ── Commit on stability ───────────────────────────
-  if (smooth.committed) commitLetter(smooth.candidate);
+  if (smooth.committed && Date.now() >= motionDisplayUntil) commitLetter(smooth.candidate);
 
   // ── Update main badge ─────────────────────────────
   const letterEl  = document.getElementById('aslLetter');
@@ -980,7 +782,7 @@ function onHandResults(results) {
     confEl.style.color   = '#ffdd00';
     stableEl.textContent = '';
     if (fillEl) fillEl.style.width = '0%';
-    maybeAddToHistory(detectedMotionLetter);
+
   } else {
     letterEl.textContent = displayLetter;
     const pct = Math.round(smooth.rfConf * 100);
@@ -997,7 +799,7 @@ function onHandResults(results) {
 
     // Status text
     const remaining = Math.max(0, CFG.STABLE_MS - smooth.heldMs);
-    if (smooth.progress >= 1 && smooth.confOk && smooth.marginOk) {
+    if (smooth.committedForHold) {
       stableEl.textContent = `✓ Committed  (${(smooth.majority*100)|0}% majority)`;
       stableEl.style.color = '#4aff4a';
     } else if (smooth.heldMs > 80) {
@@ -1019,6 +821,7 @@ function onHandResults(results) {
   if (calibEl) { calibEl.textContent = hint; calibEl.classList.toggle('show', hint !== ''); }
 
   // ── Debug panel ───────────────────────────────────
+  if (document.getElementById('debugPanel').style.display === 'none') return;
   const feats = features;
   const names = ['eT','eI','eM','eR','eP'];
   const extBar = names.map((n,i) => {
@@ -1064,100 +867,154 @@ function showMotionFlash(letter) {
 // ═══════════════════════════════════════════════════════
 // CAMERA & MEDIAPIPE SETUP
 // ═══════════════════════════════════════════════════════
-async function setupCamera() {
+let hands = null;
+let cameraStarting = false;
+let cameraGeneration = 0;
+let frameRequest = null;
+let lastVideoTime = -1;
+let pendingHandFrame = Promise.resolve();
+let activeSendGeneration = 0;
+
+function resetRecognition() {
+  predBuf.length = 0;
+  stableCandidate = null; stableStartTime = 0; committedForHold = false;
+  confirmedLetter = null; lastCommitTime = 0; lastAddedLetter = null;
+  wordBuffer = []; wordGeneration++; wordCooldownUntil = 0;
+  indexTrailX = []; indexTrailY = []; pinkyTrailX = [];
+  detectedMotionLetter = null; motionDisplayUntil = 0;
+  document.getElementById('stabilityFill').style.width = '0%';
+}
+
+function resizePreview() {
   const video = document.getElementById('video');
   const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
+  const box = document.getElementById('videoContainer');
+  const aspect = video.videoWidth / video.videoHeight || 16 / 9;
+  const width = Math.min(box.clientWidth, box.clientHeight * aspect);
+  const height = width / aspect;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  state.videoDisplayWidth = width; state.videoDisplayHeight = height;
+  canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
+  canvas.style.width = width + 'px'; canvas.style.height = height + 'px';
+  canvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+}
 
+async function processFrame(generation) {
+  if (!state.cameraActive || generation !== cameraGeneration) return;
+  const video = document.getElementById('video');
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: 1280, height: 720 }
-    });
-    video.srcObject = stream;
-    await video.play();
-
-    await new Promise(resolve => {
-      if (video.readyState >= 2) resolve();
-      else video.addEventListener('loadedmetadata', resolve, { once: true });
-    });
-
-    const vW = video.videoWidth, vH = video.videoHeight;
-    const vAR = vW/vH, winAR = window.innerWidth/window.innerHeight;
-    let dW, dH;
-    if (vAR > winAR) { dH = window.innerHeight; dW = dH * vAR; }
-    else             { dW = window.innerWidth;   dH = dW / vAR; }
-
-    const dpr = window.devicePixelRatio || 1;
-    state.videoDisplayWidth = dW;
-    state.videoDisplayHeight = dH;
-    state.dpr = dpr;
-    state.cameraActive = true;
-
-    canvas.width  = Math.round(dW * dpr);
-    canvas.height = Math.round(dH * dpr);
-    canvas.style.width  = dW + 'px';
-    canvas.style.height = dH + 'px';
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    return true;
-  } catch (err) {
-    console.error('Camera error:', err);
-    alert('Camera access denied. Please allow camera access and reload.');
-    return false;
+    if (!document.hidden && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+      lastVideoTime = video.currentTime;
+      activeSendGeneration = generation;
+      pendingHandFrame = hands.send({ image: video });
+      await pendingHandFrame;
+    }
+    if (state.cameraActive && generation === cameraGeneration)
+      frameRequest = requestAnimationFrame(() => processFrame(generation));
+  } catch (error) {
+    if (generation !== cameraGeneration) return;
+    stopCamera();
+    document.getElementById('cameraMessage').textContent = 'Hand tracking could not start. Check your connection and try again.';
+    console.error('Hand tracking failed:', error);
   }
 }
 
 async function init() {
-  const ok = await setupCamera();
-  if (!ok) return;
-
-  const hands = new Hands({
-    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
-  });
-  hands.setOptions({
-    maxNumHands: 1,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.65,
-    minTrackingConfidence: 0.65
-  });
-  hands.onResults(onHandResults);
-
-  const camera = new Camera(document.getElementById('video'), {
-    onFrame: async () => await hands.send({ image: document.getElementById('video') }),
-    width: 1280, height: 720
-  });
-  camera.start();
-
-  document.getElementById('loading').remove();
+  if (cameraStarting || state.cameraActive) return;
+  cameraStarting = true;
+  const generation = ++cameraGeneration;
+  const button = document.getElementById('startCamera');
+  const message = document.getElementById('cameraMessage');
+  button.disabled = true; button.textContent = 'Starting…';
+  let stream;
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('SECURE_CONTEXT');
+    if (typeof Hands === 'undefined') throw new Error('TRACKING_UNAVAILABLE');
+    if (!hands) {
+      hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}` });
+      hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.65, minTrackingConfidence: 0.65 });
+      hands.onResults(results => {
+        if (activeSendGeneration === cameraGeneration) onHandResults(results);
+      });
+    }
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
+      facingMode: 'user', width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 }
+    }});
+    if (generation !== cameraGeneration) { stream.getTracks().forEach(track => track.stop()); return; }
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    await video.play();
+    if (generation !== cameraGeneration) { stream.getTracks().forEach(track => track.stop()); return; }
+    // A stopped session may still have one MediaPipe send in flight.
+    await pendingHandFrame.catch(() => {});
+    if (generation !== cameraGeneration) { stream.getTracks().forEach(track => track.stop()); return; }
+    state.cameraActive = true; lastVideoTime = -1;
+    resetRecognition(); resizePreview();
+    document.getElementById('loading').hidden = true;
+    document.getElementById('cameraStatus').textContent = '● Camera live';
+    document.getElementById('cameraToggle').disabled = false;
+    stream.getVideoTracks()[0].addEventListener('ended', () => { if (generation === cameraGeneration) stopCamera(); });
+    processFrame(generation);
+  } catch (error) {
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    stopCamera();
+    const messages = {
+      NotAllowedError: 'Camera permission was declined. Allow camera access in your browser, then try again.',
+      NotFoundError: 'No camera found. Connect a camera, then try again.',
+      NotReadableError: 'Your camera is busy. Close other camera apps, then try again.',
+      SECURE_CONTEXT: 'Open this page on localhost or HTTPS to use your camera.',
+      TRACKING_UNAVAILABLE: 'Hand tracking did not load. Check your internet connection, then reload this page.'
+    };
+    message.textContent = messages[error.name] || messages[error.message] || 'Unable to start the camera. Please try again.';
+    console.error('Camera startup failed:', error);
+  } finally {
+    cameraStarting = false; button.disabled = false; button.textContent = 'Start camera ↗';
+  }
 }
 
-// ── Resize handler ──────────────────────────────────
-window.addEventListener('resize', () => {
-  if (!state.cameraActive) return;
+function stopCamera() {
+  state.cameraActive = false; cameraGeneration++;
+  if (frameRequest !== null) cancelAnimationFrame(frameRequest);
   const video = document.getElementById('video');
+  if (video.srcObject) video.srcObject.getTracks().forEach(track => track.stop());
+  video.srcObject = null;
+  resetRecognition();
   const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-  const vAR = video.videoWidth/video.videoHeight||16/9;
-  const winAR = window.innerWidth/window.innerHeight;
-  let dW, dH;
-  if (vAR > winAR) { dH=window.innerHeight; dW=dH*vAR; }
-  else             { dW=window.innerWidth; dH=dW/vAR; }
-  const dpr=window.devicePixelRatio||1;
-  state.videoDisplayWidth=dW; state.videoDisplayHeight=dH; state.dpr=dpr;
-  canvas.width=Math.round(dW*dpr); canvas.height=Math.round(dH*dpr);
-  canvas.style.width=dW+'px'; canvas.style.height=dH+'px';
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-});
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  document.getElementById('loading').hidden = false;
+  document.getElementById('cameraMessage').textContent = 'Start your camera and hold one hand in the frame.';
+  document.getElementById('cameraStatus').textContent = 'Camera off';
+  document.getElementById('cameraToggle').disabled = true;
+  document.getElementById('aslLetter').textContent = '—';
+  document.getElementById('aslConf').textContent = 'Camera off';
+  document.getElementById('aslStable').textContent = '';
+  document.getElementById('wordLabel').textContent = '—';
+  document.getElementById('wordConf').textContent = 'Camera off';
+  document.getElementById('calibHint').classList.remove('show');
+  window.speechSynthesis?.cancel();
+}
 
-// ── Keyboard: Backspace clears history ──────────────
-document.addEventListener('keydown', e => {
-  if (e.key === 'Backspace') {
-    letterHistory.length = 0;
-    document.getElementById('historyText').textContent = '_ _ _';
-  }
-});
+function clearHistory() {
+  letterHistory.length = 0; phraseTokens = []; resetRecognition();
+  document.getElementById('historyText').textContent = 'Your letters appear here';
+  document.getElementById('lastCommit').textContent = '';
+  updatePhraseBar();
+}
 
-init();
+function toggleDebug() {
+  const panel = document.getElementById('debugPanel');
+  const open = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  document.getElementById('debugToggle').setAttribute('aria-expanded', String(open));
+}
+new ResizeObserver(resizePreview).observe(document.getElementById('videoContainer'));
+window.addEventListener('pagehide', stopCamera);
+document.addEventListener('visibilitychange', () => { if (document.hidden) resetRecognition(); });
+document.addEventListener('keydown', event => {
+  if (event.target.matches('input, textarea, [contenteditable]')) return;
+  if (event.key === 'Backspace') { event.preventDefault(); clearHistory(); }
+  if (event.key === '?') toggleDebug();
+});
 </script>
 </body>
 </html>
